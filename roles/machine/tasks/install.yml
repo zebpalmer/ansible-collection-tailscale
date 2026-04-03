@@ -11,17 +11,43 @@
     update_cache: true
   when: tailscale_package_state != 'absent'
 
-- name: Download Tailscale GPG key
+- name: Ensure /etc/apt/keyrings directory exists
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  when: tailscale_package_state != 'absent'
+
+- name: Download Tailscale GPG key (ASCII-armored)
   ansible.builtin.get_url:
     url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.gpg"
-    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    dest: /tmp/tailscale-keyring.gpg.asc
     mode: "0644"
+  register: _tailscale_gpg_download
   when: tailscale_package_state != 'absent'
+
+- name: Check if dearmored Tailscale GPG keyring exists
+  ansible.builtin.stat:
+    path: /etc/apt/keyrings/tailscale-archive-keyring.gpg
+  register: _tailscale_keyring_stat
+  when: tailscale_package_state != 'absent'
+
+- name: Dearmor Tailscale GPG key for apt signed-by
+  ansible.builtin.command:
+    cmd: >-
+      gpg --dearmor -o /etc/apt/keyrings/tailscale-archive-keyring.gpg
+      /tmp/tailscale-keyring.gpg.asc
+  when:
+    - tailscale_package_state != 'absent'
+    - _tailscale_gpg_download.changed or not _tailscale_keyring_stat.stat.exists
+  changed_when: true
 
 - name: Add Tailscale apt repository
   ansible.builtin.apt_repository:
     repo: >-
-      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
+      deb [signed-by=/etc/apt/keyrings/tailscale-archive-keyring.gpg]
       https://pkgs.tailscale.com/stable/ubuntu
       {{ ansible_distribution_release }} main
     state: present
@@ -45,7 +71,7 @@
 - name: Remove Tailscale apt repository on uninstall
   ansible.builtin.apt_repository:
     repo: >-
-      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
+      deb [signed-by=/etc/apt/keyrings/tailscale-archive-keyring.gpg]
       https://pkgs.tailscale.com/stable/ubuntu
       {{ ansible_distribution_release }} main
     state: absent
@@ -54,7 +80,7 @@
 
 - name: Remove Tailscale GPG key on uninstall
   ansible.builtin.file:
-    path: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    path: /etc/apt/keyrings/tailscale-archive-keyring.gpg
     state: absent
   when: tailscale_package_state == 'absent'
 
