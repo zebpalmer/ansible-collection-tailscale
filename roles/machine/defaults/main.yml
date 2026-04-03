@@ -17,6 +17,12 @@
 #   4. Vault-encrypt the secret: ansible-vault encrypt_string 'tskey-client-...'
 tailscale_authkey: ""
 
+# Your Tailscale tailnet name — found in the Tailscale admin console URL or
+# Settings → General. Typically your org domain (e.g. "example.com") or your
+# personal login (e.g. "alice@gmail.com"). Required when authenticating via
+# OAuth client secret; the "-" alias does not work with OAuth.
+tailscale_tailnet: ""
+
 # Ephemeral nodes are removed from the tailnet when offline. Keep false for
 # persistent servers — ephemeral nodes that go offline lose their credentials
 # and cannot reconnect after a reboot without a fresh ansible run.
