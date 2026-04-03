@@ -41,10 +41,11 @@ define bump-version
 		major) NEW=$$(echo $$CURRENT | awk -F. '{$$1+=1; $$2=0; $$3=0; print $$1"."$$2"."$$3}' OFS=.) ;; \
 	esac; \
 	echo "Bumping $$CURRENT -> $$NEW"; \
-	sed -i "s/^version: .*/version: $$NEW/" galaxy.yml; \
-	git add galaxy.yml; \
-	git commit -m "Release $$NEW"; \
-	git tag -a "$$NEW" -m "Release $$NEW"; \
+	sed -i '' "s/^version: .*/version: $$NEW/" galaxy.yml && \
+	sed -i '' "s/version: \"[0-9]*\.[0-9]*\.[0-9]*\"/version: \"$$NEW\"/g" README.md && \
+	git add galaxy.yml README.md && \
+	git commit -m "Release $$NEW" && \
+	git tag -a "$$NEW" -m "Release $$NEW" && \
 	echo "Tagged $$NEW"
 endef
 
