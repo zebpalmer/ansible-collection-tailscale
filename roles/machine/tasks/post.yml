@@ -1,0 +1,8 @@
+---
+# Post-bring-up configuration applied via `tailscale set`.
+# These commands are idempotent — tailscale set is a no-op if the value
+# already matches.
+
+- name: Configure Tailscale auto-update
+  ansible.builtin.command: tailscale set --auto-update={{ tailscale_auto_update | string | lower }}
+  changed_when: false

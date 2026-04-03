@@ -1,0 +1,14 @@
+---
+- name: Install Tailscale
+  ansible.builtin.import_tasks: install.yml
+
+- name: Configure Tailscale
+  ansible.builtin.import_tasks: configure.yml
+
+- name: Bring up Tailscale
+  ansible.builtin.import_tasks: up.yml
+  when: tailscale_package_state != 'absent'
+
+- name: Post-configuration
+  ansible.builtin.import_tasks: post.yml
+  when: tailscale_package_state != 'absent'

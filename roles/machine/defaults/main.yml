@@ -1,0 +1,80 @@
+---
+# Composable Tailscale feature flags — set per-host or per-group to control
+# what gets passed to `tailscale up`. The role constructs the full CLI invocation
+# from these vars so you never need to write raw argument strings in inventory.
+
+# ---------------------------------------------------------------------------
+# Authentication
+# ---------------------------------------------------------------------------
+# Use an OAuth client secret (tskey-client-xxx) rather than an expiring auth
+# key. OAuth secrets never expire, eliminating 90-day rotation.
+# Store tailscale_authkey in an Ansible Vault-encrypted vars file.
+#
+# One-time setup:
+#   1. Tailscale admin → Settings → OAuth Clients → Create client
+#   2. Scope: Auth Keys → Write
+#   3. Assign tags (must exist in ACL tagOwners)
+#   4. Vault-encrypt the secret: ansible-vault encrypt_string 'tskey-client-...'
+tailscale_authkey: ""
+
+# Ephemeral nodes are removed from the tailnet when offline.
+# false = persistent server  |  true = container / CI runner
+tailscale_oauth_ephemeral: false
+
+# Skip manual device approval in the admin console.
+tailscale_oauth_preauthorized: true
+
+# Seconds to wait for `tailscale up` to complete.
+tailscale_up_timeout: "120"
+
+# Set true to log the auth key in plain text (useful for debugging auth failures).
+# Keep false in production.
+insecurely_log_authkey: false
+
+# ---------------------------------------------------------------------------
+# Package
+# ---------------------------------------------------------------------------
+# 'present' — install if missing, never upgrade on a routine ansible run.
+# 'latest'  — always upgrade (use a dedicated update playbook instead).
+# 'absent'  — remove tailscale.
+tailscale_package_state: present
+
+# ---------------------------------------------------------------------------
+# Tags
+# ---------------------------------------------------------------------------
+# Tags applied to this node. The "tag:" prefix is added automatically.
+# If this list is empty the role defaults it to ["servers"].
+# All tags must exist in your Tailscale ACL tagOwners and be authorized
+# on the OAuth client used for tailscale_authkey.
+tailscale_tags:
+  - "servers"
+
+# ---------------------------------------------------------------------------
+# Feature flags — map 1:1 to `tailscale up` arguments
+# ---------------------------------------------------------------------------
+tailscale_ssh: false
+tailscale_accept_dns: true
+tailscale_advertise_exit_node: false
+tailscale_accept_routes: false
+tailscale_snat_subnet_routes: true
+tailscale_stateful_filtering: false
+
+# Set to a comma-separated CIDR string to advertise subnet routes, e.g.:
+#   tailscale_advertise_routes: "10.0.1.0/24,10.0.2.0/24"
+# false or empty = flag omitted entirely (passing "" causes tailscale up to error)
+tailscale_advertise_routes: false
+
+# ---------------------------------------------------------------------------
+# Connector / subnet connector
+# ---------------------------------------------------------------------------
+# Advertises this node as an app connector. When true, tailscale_connector_tag
+# is automatically appended to tailscale_tags.
+tailscale_connector: false
+tailscale_connector_tag: "connector"
+
+# ---------------------------------------------------------------------------
+# Auto-update
+# ---------------------------------------------------------------------------
+# Disabled by default — a tailscale daemon restart in prod can cause brief
+# connectivity loss. Use a dedicated update playbook instead.
+tailscale_auto_update: false

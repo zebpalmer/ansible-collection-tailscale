@@ -1,0 +1,47 @@
+---
+# Runs `tailscale up` only when configuration has changed or the node is not
+# connected. Idempotency is achieved by hashing tailscale_args + tags and
+# comparing against a stored state file. The auth key is intentionally excluded
+# from the hash so rotating the OAuth secret does not trigger a re-up.
+
+- name: Compute configuration hash
+  ansible.builtin.set_fact:
+    _tailscale_config_hash: >-
+      {{ ((tailscale_args | trim) ~ '|' ~ (_tailscale_effective_tags | sort | join(',')))
+         | hash('sha256') }}
+
+- name: Read stored configuration hash
+  ansible.builtin.slurp:
+    src: /var/lib/tailscale-ansible.state
+  register: _tailscale_state
+  failed_when: false
+
+- name: Check Tailscale connection status
+  ansible.builtin.command: tailscale status --peers=false
+  register: _tailscale_status
+  changed_when: false
+  failed_when: false
+
+- name: Bring up Tailscale
+  ansible.builtin.command: >-
+    tailscale up
+    --authkey={{ tailscale_authkey }}
+    --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
+    {{ tailscale_args | trim }}
+    --timeout={{ tailscale_up_timeout }}s
+  no_log: "{{ not insecurely_log_authkey }}"
+  register: _tailscale_up
+  changed_when: true
+  when: >-
+    _tailscale_state.failed or
+    (_tailscale_state.content | b64decode | trim) != _tailscale_config_hash or
+    _tailscale_status.rc != 0
+
+- name: Write configuration hash to state file
+  ansible.builtin.copy:
+    content: "{{ _tailscale_config_hash }}"
+    dest: /var/lib/tailscale-ansible.state
+    owner: root
+    group: root
+    mode: "0600"
+  when: not _tailscale_up.skipped | default(false)
