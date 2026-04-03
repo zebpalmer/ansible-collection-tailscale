@@ -4,11 +4,13 @@
 # comparing against a stored state file. The auth key is intentionally excluded
 # from the hash so rotating the OAuth secret does not trigger a re-up.
 #
-# Auth flow: the OAuth client secret is exchanged for a short-lived one-time
-# auth key via the Tailscale API before calling `tailscale up`. This gives
-# explicit control over ephemeral and preauthorized settings rather than
-# relying on Tailscale's undocumented defaults when passing a client secret
-# directly.
+# Auth flow (two HTTPS steps — OAuth secret never appears in the process list):
+#   1. POST /api/v2/oauth/token  — exchange client_id + client_secret for a
+#      short-lived access token.
+#   2. POST /api/v2/tailnet/-/keys — use the access token to generate a
+#      one-time auth key (expires 300s, single-use).
+#   3. tailscale up --authkey — the one-time key appears briefly in the
+#      process list but is worthless once used or expired.
 
 - name: Compute configuration hash
   ansible.builtin.set_fact:
@@ -35,27 +37,37 @@
          (_tailscale_state.content | default('') | b64decode | trim) != _tailscale_config_hash or
          _tailscale_status.rc != 0 }}
 
+- name: Ensure tailscale_oauth_client_id is set
+  ansible.builtin.fail:
+    msg: "tailscale_oauth_client_id is not set. Add the OAuth client ID to your group_vars."
+  when: tailscale_oauth_client_id | length == 0
+
 - name: Ensure tailscale_authkey is set
   ansible.builtin.fail:
-    msg: "tailscale_authkey is not set. Vault-encrypt an OAuth client secret and assign it to tailscale_authkey."
+    msg: "tailscale_authkey is not set. Vault-encrypt the OAuth client secret and assign it to tailscale_authkey."
   when: tailscale_authkey | length == 0
-
-- name: Ensure tailscale_tailnet is set
-  ansible.builtin.fail:
-    msg: >-
-      tailscale_tailnet is not set. Set it to your tailnet name (e.g. 'example.com').
-      Found in Tailscale admin → Settings → General. Required for OAuth authentication.
-  when: tailscale_tailnet | length == 0
 
 - name: Authenticate and bring up Tailscale
   when: _tailscale_needs_up | bool
   block:
-    - name: Exchange OAuth client secret for one-time auth key
+    - name: Exchange OAuth credentials for access token
       ansible.builtin.uri:
-        url: "https://api.tailscale.com/api/v2/tailnet/{{ tailscale_tailnet }}/keys"
+        url: "https://api.tailscale.com/api/v2/oauth/token"
+        method: POST
+        body_format: form-urlencoded
+        body:
+          client_id: "{{ tailscale_oauth_client_id }}"
+          client_secret: "{{ tailscale_authkey }}"
+        status_code: 200
+      register: _tailscale_token_response
+      no_log: "{{ not tailscale_insecurely_log_authkey }}"
+
+    - name: Create one-time auth key via Tailscale API
+      ansible.builtin.uri:
+        url: "https://api.tailscale.com/api/v2/tailnet/-/keys"
         method: POST
         headers:
-          Authorization: "Bearer {{ tailscale_authkey }}"
+          Authorization: "Bearer {{ _tailscale_token_response.json.access_token }}"
           Content-Type: "application/json"
         body_format: json
         body:
@@ -69,7 +81,7 @@
           expirySeconds: 300
         status_code: 200
       register: _tailscale_auth_response
-      no_log: "{{ not insecurely_log_authkey }}"
+      no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
     - name: Bring up Tailscale
       ansible.builtin.command: >-
@@ -78,7 +90,7 @@
         --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
         {{ tailscale_args | trim }}
         --timeout={{ tailscale_up_timeout }}s
-      no_log: "{{ not insecurely_log_authkey }}"
+      no_log: "{{ not tailscale_insecurely_log_authkey }}"
       changed_when: true
 
 - name: Write configuration hash to state file

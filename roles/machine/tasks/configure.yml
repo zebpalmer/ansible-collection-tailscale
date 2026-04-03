@@ -27,14 +27,18 @@
     state: present
     reload: true
 
-# Build the effective tag list. If tailscale_tags is empty, default to
-# ["servers"] — OAuth registration requires at least one tag. Append
-# tailscale_connector_tag when connector mode is enabled.
+# Build the effective tag list. tailscale_managed_tag is always included so
+# the OAuth client only ever needs that one tag assigned to it. Additional
+# tags from tailscale_tags identify the node's role/environment. If
+# tailscale_tags is empty, default to ["servers"]. Append tailscale_connector_tag
+# when connector mode is enabled.
 - name: Build effective tailscale tags
   ansible.builtin.set_fact:
     _tailscale_effective_tags: >-
-      {{ (tailscale_tags if tailscale_tags | length > 0 else ['servers'])
-         + ([tailscale_connector_tag] if tailscale_connector else []) }}
+      {{ ([tailscale_oauth_tag]
+         + (tailscale_tags if tailscale_tags | length > 0 else ['servers'])
+         + ([tailscale_connector_tag] if tailscale_connector else []))
+         | unique }}
 
 # Construct tailscale_args from composable feature vars.
 # Notes:

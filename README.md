@@ -25,11 +25,7 @@ Run this role **last** in your playbook to avoid losing SSH connectivity to a ho
 # requirements.yml
 collections:
   - name: zebpalmer.tailscale
-    version: "0.1.0"
-```
-
-```bash
-ansible-galaxy collection install -r requirements.yml
+    version: "0.2.0"
 ```
 
 ### From GitHub (pin to a tag)
@@ -40,7 +36,7 @@ collections:
   - name: zebpalmer.tailscale
     source: https://github.com/zebpalmer/ansible-collection-tailscale
     type: git
-    version: "v0.1.0"
+    version: "0.2.0"
 ```
 
 ---
@@ -49,29 +45,65 @@ collections:
 
 Use a **Tailscale OAuth client secret** (`tskey-client-...`) as `tailscale_authkey`. OAuth secrets never expire, eliminating the 90-day rotation problem that plagues auth key-based automation.
 
-### One-time setup
+The role uses a two-step flow so the long-lived OAuth secret never appears in the process list:
 
-1. **Tailscale admin console → Settings → OAuth Clients → Create client**
-2. Scope: **Auth Keys → Write**
-3. Assign tags the client is authorized to use (e.g. `tag:servers`)
-4. Copy the secret — it is shown only once
+1. `POST /api/v2/oauth/token` — exchanges `client_id` + `client_secret` for a short-lived access token (HTTPS only, no process exposure)
+2. `POST /api/v2/tailnet/-/keys` — uses the access token to create a one-time auth key expiring in 5 minutes (HTTPS only, no process exposure)
+3. `tailscale up --authkey` — the one-time key appears briefly in the process list but is worthless once used or expired
 
-**The tags you assign to the OAuth client and the tags you pass in `tailscale_tags` must both be declared in your ACL `tagOwners`:**
+### 1. Ensure your tags exist in the ACL
+
+All tags must be declared in your Tailscale ACL policy (**admin console → Access Controls**). `tag:ansible-managed` is the role's fixed managed tag and must always be present:
 
 ```json
 "tagOwners": {
-  "tag:servers":   ["autogroup:admin"],
-  "tag:connector": ["autogroup:admin"]
+  "tag:ansible-managed": ["autogroup:admin"],
+  "tag:servers":         ["autogroup:admin"],
+  "tag:connector":       ["autogroup:admin"]
 }
 ```
 
-### Vault-encrypt the secret
+### 2. Create the OAuth client
+
+1. **Tailscale admin console → Settings → Trust Credentials → Create OAuth client**
+2. Scope: **Auth Keys → Write**
+3. Tags: assign **`ansible-managed`** — this is the only tag you ever need on the OAuth client, because the role always stamps it onto every node
+4. Copy the **Client ID** and **Client Secret** — the secret is shown **only once**
+
+### 3. Store the credentials
+
+The **Client ID** is not sensitive — store it in plain text:
+
+```yaml
+tailscale_oauth_client_id: "your-client-id-here"
+```
+
+The **Client Secret** must be vault-encrypted:
 
 ```bash
 ansible-vault encrypt_string 'tskey-client-YOUR_SECRET_HERE' --name tailscale_authkey
 ```
 
-Paste the output into your `group_vars/all.yml` (or equivalent vault file).
+Paste the output into your `group_vars/all.yml`:
+
+```yaml
+tailscale_oauth_client_id: "your-client-id-here"
+tailscale_authkey: !vault |
+  $ANSIBLE_VAULT;1.1;AES256
+  ...
+```
+
+### 4. Install the collection
+
+```bash
+ansible-galaxy collection install -r requirements.yml
+```
+
+To upgrade to a newer version after updating `requirements.yml`:
+
+```bash
+ansible-galaxy collection install -r requirements.yml --force
+```
 
 ### Prevent node key expiry
 
@@ -98,11 +130,12 @@ All variables have defaults in `roles/machine/defaults/main.yml`. Override at th
 
 | Variable | Default | Description |
 |---|---|---|
-| `tailscale_authkey` | `""` | OAuth client secret. Store vault-encrypted |
-| `tailscale_oauth_ephemeral` | `false` | `true` = node removed from tailnet when offline (containers/CI). `false` = persistent server. **Keep `false` for servers** — ephemeral nodes lose credentials when removed and cannot reconnect after reboot without a new ansible run |
-| `tailscale_oauth_preauthorized` | `true` | Skip manual device approval in admin console. Keep `true` for automation |
+| `tailscale_oauth_client_id` | `""` | OAuth client ID. Not sensitive — store in plain text |
+| `tailscale_authkey` | `""` | OAuth client secret (`tskey-client-...`). Vault-encrypt this value |
+| `tailscale_oauth_ephemeral` | `false` | `true` = node removed from tailnet when offline (containers/CI). `false` = persistent server. **Keep `false` for servers** — ephemeral nodes lose credentials on removal and cannot reconnect after reboot without a fresh ansible run |
+| `tailscale_oauth_preauthorized` | `true` | Skip manual device approval in the admin console. Keep `true` for automation |
 | `tailscale_up_timeout` | `"120"` | Seconds to wait for `tailscale up` |
-| `insecurely_log_authkey` | `false` | Log auth key in plain text. Keep `false` in production |
+| `tailscale_insecurely_log_authkey` | `false` | Log the auth key in plain text. Keep `false` in production |
 
 ### Package
 
@@ -114,7 +147,8 @@ All variables have defaults in `roles/machine/defaults/main.yml`. Override at th
 
 | Variable | Default | Description |
 |---|---|---|
-| `tailscale_tags` | `["servers"]` | Tags applied to the node. `"tag:"` prefix added automatically. Must be declared in ACL `tagOwners` and authorized on the OAuth client. Defaults to `["servers"]` if empty |
+| `tailscale_oauth_tag` | `"ansible-managed"` | Always applied to every node. This is the only tag the OAuth client needs assigned to it in Trust Credentials. Must exist in ACL `tagOwners` |
+| `tailscale_tags` | `["servers"]` | Additional tags for role/environment grouping. `"tag:"` prefix added automatically. Must exist in ACL `tagOwners`. Defaults to `["servers"]` if empty |
 
 ### Feature flags
 

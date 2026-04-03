@@ -6,26 +6,28 @@
 # ---------------------------------------------------------------------------
 # Authentication
 # ---------------------------------------------------------------------------
-# Use an OAuth client secret (tskey-client-xxx) rather than an expiring auth
-# key. OAuth secrets never expire, eliminating 90-day rotation.
-# Store tailscale_authkey in an Ansible Vault-encrypted vars file.
+# Auth flow (two steps, both via HTTPS — no secrets exposed in process list):
+#   1. client_id + client_secret → short-lived access token (oauth/token endpoint)
+#   2. access token → one-time auth key (keys API, expires in 5 min, single-use)
+#   3. one-time auth key → tailscale up (brief process exposure; low risk)
 #
 # One-time setup:
-#   1. Tailscale admin → Settings → OAuth Clients → Create client
+#   1. Tailscale admin → Settings → Trust Credentials → Create OAuth client
 #   2. Scope: Auth Keys → Write
 #   3. Assign tags (must exist in ACL tagOwners)
-#   4. Vault-encrypt the secret: ansible-vault encrypt_string 'tskey-client-...'
+#   4. Note both the Client ID and Client Secret
+#   5. Vault-encrypt the secret: ansible-vault encrypt_string 'tskey-client-...'
+#      Store the client ID in plain text (it is not sensitive).
+
+# OAuth client ID — not sensitive, store in plain text.
+tailscale_oauth_client_id: ""
+
+# OAuth client secret (tskey-client-...) — vault-encrypt this value.
 tailscale_authkey: ""
 
-# Your Tailscale tailnet name — found in the Tailscale admin console URL or
-# Settings → General. Typically your org domain (e.g. "example.com") or your
-# personal login (e.g. "alice@gmail.com"). Required when authenticating via
-# OAuth client secret; the "-" alias does not work with OAuth.
-tailscale_tailnet: ""
-
 # Ephemeral nodes are removed from the tailnet when offline. Keep false for
-# persistent servers — ephemeral nodes that go offline lose their credentials
-# and cannot reconnect after a reboot without a fresh ansible run.
+# persistent servers — ephemeral nodes lose credentials when removed and
+# cannot reconnect after reboot without a fresh ansible run.
 # true = container / CI runner  |  false = long-lived server (default)
 tailscale_oauth_ephemeral: false
 
@@ -37,7 +39,7 @@ tailscale_up_timeout: "120"
 
 # Set true to log the auth key in plain text (useful for debugging auth failures).
 # Keep false in production.
-insecurely_log_authkey: false
+tailscale_insecurely_log_authkey: false
 
 # ---------------------------------------------------------------------------
 # Package
@@ -50,10 +52,15 @@ tailscale_package_state: present
 # ---------------------------------------------------------------------------
 # Tags
 # ---------------------------------------------------------------------------
-# Tags applied to this node. The "tag:" prefix is added automatically.
-# If this list is empty the role defaults it to ["servers"].
-# All tags must exist in your Tailscale ACL tagOwners and be authorized
-# on the OAuth client used for tailscale_authkey.
+# tailscale_oauth_tag is always applied to every node managed by this role.
+# It is the only tag that needs to be assigned to the OAuth client in Trust
+# Credentials, regardless of what other tags nodes carry. It must exist in
+# your ACL tagOwners.
+tailscale_oauth_tag: "ansible-managed"
+
+# Additional tags applied to this node. The "tag:" prefix is added
+# automatically. Use these for role/environment grouping (e.g. "servers",
+# "prod"). All tags must exist in your ACL tagOwners.
 tailscale_tags:
   - "servers"
 
