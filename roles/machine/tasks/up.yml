@@ -32,8 +32,13 @@
   ansible.builtin.set_fact:
     _tailscale_needs_up: >-
       {{ _tailscale_state.failed or
-         (_tailscale_state.content | b64decode | trim) != _tailscale_config_hash or
+         (_tailscale_state.content | default('') | b64decode | trim) != _tailscale_config_hash or
          _tailscale_status.rc != 0 }}
+
+- name: Ensure tailscale_authkey is set
+  ansible.builtin.fail:
+    msg: "tailscale_authkey is not set. Vault-encrypt an OAuth client secret and assign it to tailscale_authkey."
+  when: tailscale_authkey | length == 0
 
 - name: Authenticate and bring up Tailscale
   when: _tailscale_needs_up | bool
