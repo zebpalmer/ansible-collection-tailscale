@@ -1,0 +1,69 @@
+---
+# Enables IP forwarding and constructs the tailscale_args string from
+# composable feature vars.
+#
+# Forwarding is enabled unconditionally rather than being gated on routing
+# features (exit node, subnet router, connector) or package state. Reasons:
+#   1. Tailscale removal is a server-rebuild operation in this environment,
+#      not a playbook run — so absent-state cleanup is not a real workflow.
+#   2. Treating forwarding as a baseline avoids a chicken-and-egg situation
+#      where a host promoted to exit node later would need a separate ansible
+#      run just to flip the sysctl before tailscale could function.
+#   3. Other services may depend on forwarding being enabled; disabling it
+#      on a notional tailscale removal could break them unexpectedly.
+- name: Enable IPv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Enable IPv6 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv6.conf.all.forwarding
+    value: "1"
+    sysctl_set: true
+    state: present
+    reload: true
+
+# Build the effective tag list. If tailscale_tags is empty, default to
+# ["servers"] — OAuth registration requires at least one tag. Append
+# tailscale_connector_tag when connector mode is enabled.
+- name: Build effective tailscale tags
+  ansible.builtin.set_fact:
+    _tailscale_effective_tags: >-
+      {{ (tailscale_tags if tailscale_tags | length > 0 else ['servers'])
+         + ([tailscale_connector_tag] if tailscale_connector else []) }}
+
+# Construct tailscale_args from composable feature vars.
+# Notes:
+#   - --advertise-routes is OMITTED when not set (empty string causes an error)
+#   - --advertise-connector is only included when connector mode is enabled
+#   - --advertise-tags is NOT set here; passed separately in up.yml via
+#     _tailscale_effective_tags so it stays out of tailscale_args (tags are
+#     still included in the idempotency hash — just tracked independently)
+- name: Construct tailscale_args
+  ansible.builtin.set_fact:
+    tailscale_args: >-
+      --ssh={{ tailscale_ssh | string | lower }}
+      --accept-dns={{ tailscale_accept_dns | string | lower }}
+      --advertise-exit-node={{ tailscale_advertise_exit_node | string | lower }}
+      --accept-routes={{ tailscale_accept_routes | string | lower }}
+      --snat-subnet-routes={{ tailscale_snat_subnet_routes | string | lower }}
+      --stateful-filtering={{ tailscale_stateful_filtering | string | lower }}
+      {% if tailscale_advertise_routes and tailscale_advertise_routes != false %}
+      --advertise-routes={{ tailscale_advertise_routes }}
+      {% endif %}
+      {% if tailscale_connector %}
+      --advertise-connector=true
+      {% endif %}
+
+- name: Store tailscale_args for debugging
+  ansible.builtin.copy:
+    content: "{{ tailscale_args }}"
+    dest: /opt/ansible_tailscale_args.txt
+    owner: root
+    group: root
+    mode: "0600"
+  when: tailscale_package_state != 'absent'

@@ -1,0 +1,22 @@
+namespace: zebpalmer
+name: tailscale
+version: 0.1.0
+readme: README.md
+description: >
+  Ansible collection for Tailscale on Ubuntu. Composable per-host/per-group
+  feature flags, OAuth client authentication (no 90-day key rotation), and
+  idempotent configuration via state hashing.
+license:
+  - MIT
+authors:
+  - Zeb Palmer <zeb@zebpalmer.com>
+tags:
+  - tailscale
+  - networking
+  - vpn
+  - ubuntu
+  - security
+repository: https://github.com/zebpalmer/ansible-collection-tailscale
+homepage: https://github.com/zebpalmer/ansible-collection-tailscale
+dependencies:
+  ansible.posix: ">=1.0.0"

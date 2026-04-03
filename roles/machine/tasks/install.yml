@@ -1,0 +1,68 @@
+---
+# Ubuntu-only. Adds the official Tailscale apt repository and installs the
+# package. tailscale_package_state controls whether to install, pin, or remove.
+
+- name: Install apt prerequisites
+  ansible.builtin.apt:
+    name:
+      - apt-transport-https
+      - gnupg
+    state: present
+    update_cache: true
+  when: tailscale_package_state != 'absent'
+
+- name: Download Tailscale GPG key
+  ansible.builtin.get_url:
+    url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.gpg"
+    dest: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    mode: "0644"
+  when: tailscale_package_state != 'absent'
+
+- name: Add Tailscale apt repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
+      https://pkgs.tailscale.com/stable/ubuntu
+      {{ ansible_distribution_release }} main
+    state: present
+    filename: tailscale
+  when: tailscale_package_state != 'absent'
+
+- name: Install Tailscale package
+  ansible.builtin.apt:
+    name: tailscale
+    state: "{{ tailscale_package_state }}"
+    update_cache: true
+
+- name: Stop and disable Tailscale service on uninstall
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: stopped
+    enabled: false
+  when: tailscale_package_state == 'absent'
+  failed_when: false  # service may already be stopped/missing
+
+- name: Remove Tailscale apt repository on uninstall
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/tailscale-archive-keyring.gpg]
+      https://pkgs.tailscale.com/stable/ubuntu
+      {{ ansible_distribution_release }} main
+    state: absent
+    filename: tailscale
+  when: tailscale_package_state == 'absent'
+
+- name: Remove Tailscale GPG key on uninstall
+  ansible.builtin.file:
+    path: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    state: absent
+  when: tailscale_package_state == 'absent'
+
+- name: Remove role-managed state files on uninstall
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/tailscale-ansible.state
+    - /opt/ansible_tailscale_args.txt
+  when: tailscale_package_state == 'absent'
