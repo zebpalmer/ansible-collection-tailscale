@@ -43,9 +43,9 @@ define bump-version
 	echo "Bumping $$CURRENT -> $$NEW"; \
 	sed -i "s/^version: .*/version: $$NEW/" galaxy.yml; \
 	git add galaxy.yml; \
-	git commit -m "Release v$$NEW"; \
-	git tag -a "v$$NEW" -m "Release v$$NEW"; \
-	echo "Tagged v$$NEW"
+	git commit -m "Release $$NEW"; \
+	git tag -a "$$NEW" -m "Release $$NEW"; \
+	echo "Tagged $$NEW"
 endef
 
 prompt-type:
