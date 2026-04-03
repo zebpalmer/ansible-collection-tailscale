@@ -73,6 +73,21 @@ ansible-vault encrypt_string 'tskey-client-YOUR_SECRET_HERE' --name tailscale_au
 
 Paste the output into your `group_vars/all.yml` (or equivalent vault file).
 
+### Prevent node key expiry
+
+By default Tailscale node keys expire after 180 days, disconnecting the node until it re-authenticates. For long-lived servers, disable this in your ACL policy:
+
+```json
+"nodeAttrs": [
+  {
+    "target": ["tag:servers"],
+    "attr": ["noExpiry"]
+  }
+]
+```
+
+This is a one-time ACL change per tailnet — it applies to all nodes carrying the matched tag, including existing ones. Nodes registered with `tailscale_oauth_ephemeral: false` (the default) will stay connected indefinitely without any re-auth runs.
+
 ---
 
 ## Variables
@@ -84,8 +99,8 @@ All variables have defaults in `roles/machine/defaults/main.yml`. Override at th
 | Variable | Default | Description |
 |---|---|---|
 | `tailscale_authkey` | `""` | OAuth client secret. Store vault-encrypted |
-| `tailscale_oauth_ephemeral` | `false` | `true` = node removed when offline (containers/CI). `false` = persistent server |
-| `tailscale_oauth_preauthorized` | `true` | Skip manual device approval in admin console |
+| `tailscale_oauth_ephemeral` | `false` | `true` = node removed from tailnet when offline (containers/CI). `false` = persistent server. **Keep `false` for servers** — ephemeral nodes lose credentials when removed and cannot reconnect after reboot without a new ansible run |
+| `tailscale_oauth_preauthorized` | `true` | Skip manual device approval in admin console. Keep `true` for automation |
 | `tailscale_up_timeout` | `"120"` | Seconds to wait for `tailscale up` |
 | `insecurely_log_authkey` | `false` | Log auth key in plain text. Keep `false` in production |
 

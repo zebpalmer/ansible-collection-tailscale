@@ -3,6 +3,12 @@
 # connected. Idempotency is achieved by hashing tailscale_args + tags and
 # comparing against a stored state file. The auth key is intentionally excluded
 # from the hash so rotating the OAuth secret does not trigger a re-up.
+#
+# Auth flow: the OAuth client secret is exchanged for a short-lived one-time
+# auth key via the Tailscale API before calling `tailscale up`. This gives
+# explicit control over ephemeral and preauthorized settings rather than
+# relying on Tailscale's undocumented defaults when passing a client secret
+# directly.
 
 - name: Compute configuration hash
   ansible.builtin.set_fact:
@@ -22,20 +28,46 @@
   changed_when: false
   failed_when: false
 
-- name: Bring up Tailscale
-  ansible.builtin.command: >-
-    tailscale up
-    --authkey={{ tailscale_authkey }}
-    --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
-    {{ tailscale_args | trim }}
-    --timeout={{ tailscale_up_timeout }}s
-  no_log: "{{ not insecurely_log_authkey }}"
-  register: _tailscale_up
-  changed_when: true
-  when: >-
-    _tailscale_state.failed or
-    (_tailscale_state.content | b64decode | trim) != _tailscale_config_hash or
-    _tailscale_status.rc != 0
+- name: Determine if Tailscale up is needed
+  ansible.builtin.set_fact:
+    _tailscale_needs_up: >-
+      {{ _tailscale_state.failed or
+         (_tailscale_state.content | b64decode | trim) != _tailscale_config_hash or
+         _tailscale_status.rc != 0 }}
+
+- name: Authenticate and bring up Tailscale
+  when: _tailscale_needs_up | bool
+  block:
+    - name: Exchange OAuth client secret for one-time auth key
+      ansible.builtin.uri:
+        url: "https://api.tailscale.com/api/v2/tailnet/-/keys"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ tailscale_authkey }}"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          capabilities:
+            devices:
+              create:
+                reusable: false
+                ephemeral: "{{ tailscale_oauth_ephemeral | bool }}"
+                preauthorized: "{{ tailscale_oauth_preauthorized | bool }}"
+                tags: "{{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | list }}"
+          expirySeconds: 300
+        status_code: 200
+      register: _tailscale_auth_response
+      no_log: "{{ not insecurely_log_authkey }}"
+
+    - name: Bring up Tailscale
+      ansible.builtin.command: >-
+        tailscale up
+        --authkey={{ _tailscale_auth_response.json.key }}
+        --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
+        {{ tailscale_args | trim }}
+        --timeout={{ tailscale_up_timeout }}s
+      no_log: "{{ not insecurely_log_authkey }}"
+      changed_when: true
 
 - name: Write configuration hash to state file
   ansible.builtin.copy:
@@ -44,4 +76,4 @@
     owner: root
     group: root
     mode: "0600"
-  when: not _tailscale_up.skipped | default(false)
+  when: _tailscale_needs_up | bool

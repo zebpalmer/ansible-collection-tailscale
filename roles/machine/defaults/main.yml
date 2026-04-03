@@ -17,11 +17,13 @@
 #   4. Vault-encrypt the secret: ansible-vault encrypt_string 'tskey-client-...'
 tailscale_authkey: ""
 
-# Ephemeral nodes are removed from the tailnet when offline.
-# false = persistent server  |  true = container / CI runner
+# Ephemeral nodes are removed from the tailnet when offline. Keep false for
+# persistent servers — ephemeral nodes that go offline lose their credentials
+# and cannot reconnect after a reboot without a fresh ansible run.
+# true = container / CI runner  |  false = long-lived server (default)
 tailscale_oauth_ephemeral: false
 
-# Skip manual device approval in the admin console.
+# Skip manual device approval in the admin console. Keep true for automation.
 tailscale_oauth_preauthorized: true
 
 # Seconds to wait for `tailscale up` to complete.

@@ -18,4 +18,5 @@ tags:
   - security
 repository: https://github.com/zebpalmer/ansible-collection-tailscale
 homepage: https://github.com/zebpalmer/ansible-collection-tailscale
-dependencies: {}
+dependencies:
+  ansible.posix: ">=1.0.0"

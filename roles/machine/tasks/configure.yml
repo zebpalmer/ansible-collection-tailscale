@@ -41,7 +41,8 @@
 #   - --advertise-routes is OMITTED when not set (empty string causes an error)
 #   - --advertise-connector is only included when connector mode is enabled
 #   - --advertise-tags is NOT set here; passed separately in up.yml via
-#     _tailscale_effective_tags so it stays out of the idempotency hash string
+#     _tailscale_effective_tags so it stays out of tailscale_args (tags are
+#     still included in the idempotency hash — just tracked independently)
 - name: Construct tailscale_args
   ansible.builtin.set_fact:
     tailscale_args: >-
@@ -65,3 +66,4 @@
     owner: root
     group: root
     mode: "0600"
+  when: tailscale_package_state != 'absent'

@@ -34,6 +34,14 @@
     state: "{{ tailscale_package_state }}"
     update_cache: true
 
+- name: Stop and disable Tailscale service on uninstall
+  ansible.builtin.systemd:
+    name: tailscaled
+    state: stopped
+    enabled: false
+  when: tailscale_package_state == 'absent'
+  failed_when: false  # service may already be stopped/missing
+
 - name: Remove Tailscale apt repository on uninstall
   ansible.builtin.apt_repository:
     repo: >-
@@ -48,4 +56,13 @@
   ansible.builtin.file:
     path: /usr/share/keyrings/tailscale-archive-keyring.gpg
     state: absent
+  when: tailscale_package_state == 'absent'
+
+- name: Remove role-managed state files on uninstall
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/tailscale-ansible.state
+    - /opt/ansible_tailscale_args.txt
   when: tailscale_package_state == 'absent'
