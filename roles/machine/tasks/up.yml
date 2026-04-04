@@ -92,6 +92,13 @@
         --timeout={{ tailscale_up_timeout }}s
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
       changed_when: true
+      async: "{{ tailscale_up_timeout | int + 30 }}"
+      poll: 0
+
+    - name: Wait for Tailscale to reconnect
+      ansible.builtin.wait_for_connection:
+        delay: 5
+        timeout: "{{ tailscale_up_timeout | int + 30 }}"
 
 - name: Write configuration hash to state file
   ansible.builtin.copy:
