@@ -29,11 +29,10 @@
     reload: true
   when: tailscale_ipv6_forwarding | bool
 
-# Build the effective tag list. tailscale_managed_tag is always included so
-# the OAuth client only ever needs that one tag assigned to it. Additional
-# tags from tailscale_tags identify the node's role/environment. If
-# tailscale_tags is empty, default to ["servers"]. Append tailscale_connector_tag
-# when connector mode is enabled.
+# Build the effective tag list. tailscale_oauth_tag is always included — the
+# OAuth client must be authorized for this tag plus all tags in tailscale_tags.
+# If tailscale_tags is empty, default to ["servers"]. Append
+# tailscale_connector_tag when connector mode is enabled.
 - name: Build effective tailscale tags
   ansible.builtin.set_fact:
     _tailscale_effective_tags: >-
@@ -46,9 +45,8 @@
 # Notes:
 #   - --advertise-routes is OMITTED when not set (empty string causes an error)
 #   - --advertise-connector is only included when connector mode is enabled
-#   - --advertise-tags is NOT set here; passed separately in up.yml via
-#     _tailscale_effective_tags so it stays out of tailscale_args (tags are
-#     still included in the idempotency hash — just tracked independently)
+#   - --advertise-tags is NOT set here; initial up uses only tailscale_oauth_tag,
+#     full tag reconciliation happens in post.yml via `tailscale set`
 - name: Construct tailscale_args
   ansible.builtin.set_fact:
     tailscale_args: >-

@@ -110,3 +110,12 @@ tailscale_connector_tag: "connector"
 # Disabled by default — a tailscale daemon restart in prod can cause brief
 # connectivity loss. Use a dedicated update playbook instead.
 tailscale_auto_update: false
+
+# ---------------------------------------------------------------------------
+# Key expiry
+# ---------------------------------------------------------------------------
+# Tailscale devices have a key expiry (default 180 days) after which they are
+# removed from the tailnet. For ansible-managed servers this is undesirable —
+# the role can re-authenticate the node but only when it can reach the host.
+# Set true to disable key expiry on every managed node via the admin API.
+tailscale_key_expiry_disabled: true
