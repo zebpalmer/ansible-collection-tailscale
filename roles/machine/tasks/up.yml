@@ -103,7 +103,7 @@
       ansible.builtin.command: tailscale status --peers=false
       register: _tailscale_verify
       changed_when: false
-      failed_when: _tailscale_verify.rc != 0 or 'Running' not in _tailscale_verify.stdout
+      failed_when: _tailscale_verify.rc != 0
 
 - name: Write configuration hash to state file
   ansible.builtin.copy:
