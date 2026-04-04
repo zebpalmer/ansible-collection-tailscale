@@ -1,6 +1,7 @@
 ---
-# Ubuntu-only. Adds the official Tailscale apt repository and installs the
-# package. tailscale_package_state controls whether to install, pin, or remove.
+# Adds the official Tailscale apt repository and installs the package.
+# Supports Ubuntu and Debian. tailscale_package_state controls whether to
+# install, pin, or remove.
 
 - name: Install apt prerequisites
   ansible.builtin.apt:
@@ -22,7 +23,7 @@
 
 - name: Download Tailscale GPG key (ASCII-armored)
   ansible.builtin.get_url:
-    url: "https://pkgs.tailscale.com/stable/ubuntu/{{ ansible_distribution_release }}.gpg"
+    url: "https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }}/{{ ansible_distribution_release }}.gpg"
     dest: /tmp/tailscale-keyring.gpg.asc
     mode: "0644"
   register: _tailscale_gpg_download
@@ -64,7 +65,7 @@
   ansible.builtin.apt_repository:
     repo: >-
       deb [signed-by=/etc/apt/keyrings/tailscale-archive-keyring.gpg]
-      https://pkgs.tailscale.com/stable/ubuntu
+      https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }}
       {{ ansible_distribution_release }} main
     state: present
     filename: tailscale
@@ -88,7 +89,7 @@
   ansible.builtin.apt_repository:
     repo: >-
       deb [signed-by=/etc/apt/keyrings/tailscale-archive-keyring.gpg]
-      https://pkgs.tailscale.com/stable/ubuntu
+      https://pkgs.tailscale.com/stable/{{ ansible_distribution | lower }}
       {{ ansible_distribution_release }} main
     state: absent
     filename: tailscale
