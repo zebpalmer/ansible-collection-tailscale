@@ -1,7 +1,43 @@
 ---
-# Post-bring-up configuration applied via `tailscale set`.
-# These commands are idempotent — tailscale set is a no-op if the value
-# already matches.
+# Post-bring-up configuration applied on every run.
+# Key expiry and auto-update are managed here — neither requires a re-up.
+# Tags are set during `tailscale up` in up.yml and tracked in the config hash,
+# so tag changes trigger a re-up automatically.
+
+- name: Exchange OAuth credentials for access token
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/oauth/token"
+    method: POST
+    body_format: form-urlencoded
+    body:
+      client_id: "{{ tailscale_oauth_client_id }}"
+      client_secret: "{{ tailscale_authkey }}"
+    status_code: 200
+  register: _tailscale_post_token
+  delegate_to: localhost
+  become: false
+  no_log: "{{ not tailscale_insecurely_log_authkey }}"
+
+- name: Get Tailscale node ID
+  ansible.builtin.command: tailscale status --json
+  register: _tailscale_status_json
+  changed_when: false
+
+- name: Set key expiry via Tailscale API
+  ansible.builtin.uri:
+    url: "https://api.tailscale.com/api/v2/device/{{ (_tailscale_status_json.stdout | from_json).Self.ID }}/key"
+    method: POST
+    headers:
+      Authorization: "Bearer {{ _tailscale_post_token.json.access_token }}"
+      Content-Type: "application/json"
+    body_format: json
+    body:
+      keyExpiryDisabled: "{{ tailscale_key_expiry_disabled | bool }}"
+    status_code: 200
+  delegate_to: localhost
+  become: false
+  no_log: "{{ not tailscale_insecurely_log_authkey }}"
+  changed_when: false
 
 - name: Configure Tailscale auto-update
   ansible.builtin.command: tailscale set --auto-update={{ tailscale_auto_update | string | lower }}
