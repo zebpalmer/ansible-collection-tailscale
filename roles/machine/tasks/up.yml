@@ -117,11 +117,26 @@
 
 - name: Update Tailscale configuration (already connected)
   when: _tailscale_needs_up | bool and _tailscale_status.rc == 0
-  ansible.builtin.command: >-
-    tailscale up
-    --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
-    {{ tailscale_args | trim }}
-  changed_when: true
+  block:
+    - name: Apply updated Tailscale configuration
+      ansible.builtin.shell: >-
+        systemd-run --no-block --
+        tailscale up
+        --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
+        {{ tailscale_args | trim }}
+        --timeout={{ tailscale_up_timeout }}s
+      changed_when: true
+
+    - name: Wait for Tailscale to reconnect
+      ansible.builtin.wait_for_connection:
+        delay: 3
+        timeout: 60
+
+    - name: Verify Tailscale is running
+      ansible.builtin.command: tailscale status --peers=false
+      register: _tailscale_verify
+      changed_when: false
+      failed_when: _tailscale_verify.rc != 0
 
 - name: Write configuration hash to state file
   ansible.builtin.copy:
