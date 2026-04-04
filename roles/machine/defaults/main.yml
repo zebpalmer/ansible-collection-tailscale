@@ -65,6 +65,18 @@ tailscale_tags:
   - "servers"
 
 # ---------------------------------------------------------------------------
+# IP forwarding
+# ---------------------------------------------------------------------------
+# IPv4 forwarding is always enabled — required for exit node, subnet router,
+# and connector features, and avoids a chicken-and-egg problem if a host is
+# promoted to one of those roles later.
+tailscale_ipv4_forwarding: true
+
+# IPv6 forwarding can be disabled per-host if it causes issues (e.g. hosts
+# without IPv6 interfaces or with conflicting kernel settings).
+tailscale_ipv6_forwarding: true
+
+# ---------------------------------------------------------------------------
 # Feature flags — map 1:1 to `tailscale up` arguments
 # ---------------------------------------------------------------------------
 tailscale_ssh: false
@@ -78,6 +90,11 @@ tailscale_stateful_filtering: false
 #   tailscale_advertise_routes: "10.0.1.0/24,10.0.2.0/24"
 # false or empty = flag omitted entirely (passing "" causes tailscale up to error)
 tailscale_advertise_routes: false
+
+# Port for a self-hosted DERP relay server running on this node.
+# false or empty = flag omitted (most nodes). Set to an integer port number
+# only on dedicated relay hosts (e.g. tailscale_relay_server_port: 42001).
+tailscale_relay_server_port: false
 
 # ---------------------------------------------------------------------------
 # Connector / subnet connector

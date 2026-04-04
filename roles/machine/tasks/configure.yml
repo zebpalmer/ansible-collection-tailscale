@@ -18,6 +18,7 @@
     sysctl_set: true
     state: present
     reload: true
+  when: tailscale_ipv4_forwarding | bool
 
 - name: Enable IPv6 forwarding
   ansible.posix.sysctl:
@@ -26,6 +27,7 @@
     sysctl_set: true
     state: present
     reload: true
+  when: tailscale_ipv6_forwarding | bool
 
 # Build the effective tag list. tailscale_managed_tag is always included so
 # the OAuth client only ever needs that one tag assigned to it. Additional
@@ -61,6 +63,9 @@
       {% endif %}
       {% if tailscale_connector %}
       --advertise-connector=true
+      {% endif %}
+      {% if tailscale_relay_server_port and tailscale_relay_server_port != false %}
+      --relay-server-port={{ tailscale_relay_server_port }}
       {% endif %}
 
 - name: Store tailscale_args for debugging
