@@ -4,13 +4,19 @@
 # comparing against a stored state file. The auth key is intentionally excluded
 # from the hash so rotating the OAuth secret does not trigger a re-up.
 #
-# Auth flow (two HTTPS steps — OAuth secret never appears in the process list):
-#   1. POST /api/v2/oauth/token  — exchange client_id + client_secret for a
-#      short-lived access token.
-#   2. POST /api/v2/tailnet/-/keys — use the access token to generate a
-#      one-time auth key (expires 300s, single-use).
-#   3. tailscale up --authkey — the one-time key appears briefly in the
-#      process list but is worthless once used or expired.
+# Two distinct paths depending on connection state:
+#
+#   NOT connected — full OAuth auth flow:
+#     1. POST /api/v2/oauth/token  — exchange client_id + client_secret for a
+#        short-lived access token.
+#     2. POST /api/v2/tailnet/-/keys — use the access token to generate a
+#        one-time auth key (expires 300s, single-use).
+#     3. systemd-run tailscale up --authkey — detached from the SSH session so
+#        a Tailscale restart mid-play does not kill the process.
+#
+#   Already connected, config changed — update in-place without re-auth:
+#     tailscale up (no --authkey) — updates args and tags on the existing
+#     device identity. No new device is created, no duplicate in the admin UI.
 
 - name: Compute configuration hash
   ansible.builtin.set_fact:
@@ -47,8 +53,10 @@
     msg: "tailscale_authkey is not set. Vault-encrypt the OAuth client secret and assign it to tailscale_authkey."
   when: tailscale_authkey | length == 0
 
-- name: Authenticate and bring up Tailscale
-  when: _tailscale_needs_up | bool
+# --- Path A: node is not connected — full OAuth auth flow ---
+
+- name: Authenticate and bring up Tailscale (not connected)
+  when: _tailscale_needs_up | bool and _tailscale_status.rc != 0
   block:
     - name: Exchange OAuth credentials for access token
       ansible.builtin.uri:
@@ -83,7 +91,7 @@
       register: _tailscale_auth_response
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
-    - name: Bring up Tailscale
+    - name: Bring up Tailscale with auth key
       ansible.builtin.shell: >-
         systemd-run --no-block --
         tailscale up
@@ -104,6 +112,16 @@
       register: _tailscale_verify
       changed_when: false
       failed_when: _tailscale_verify.rc != 0
+
+# --- Path B: already connected, config changed — update in-place ---
+
+- name: Update Tailscale configuration (already connected)
+  when: _tailscale_needs_up | bool and _tailscale_status.rc == 0
+  ansible.builtin.command: >-
+    tailscale up
+    --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
+    {{ tailscale_args | trim }}
+  changed_when: true
 
 - name: Write configuration hash to state file
   ansible.builtin.copy:
