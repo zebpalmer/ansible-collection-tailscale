@@ -84,7 +84,8 @@
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
     - name: Bring up Tailscale
-      ansible.builtin.command: >-
+      ansible.builtin.shell: >-
+        systemd-run --no-block --
         tailscale up
         --authkey={{ _tailscale_auth_response.json.key }}
         --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
@@ -92,13 +93,17 @@
         --timeout={{ tailscale_up_timeout }}s
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
       changed_when: true
-      async: "{{ tailscale_up_timeout | int + 30 }}"
-      poll: 0
 
     - name: Wait for Tailscale to reconnect
       ansible.builtin.wait_for_connection:
         delay: 5
         timeout: "{{ tailscale_up_timeout | int + 30 }}"
+
+    - name: Verify Tailscale is running
+      ansible.builtin.command: tailscale status --peers=false
+      register: _tailscale_verify
+      changed_when: false
+      failed_when: _tailscale_verify.rc != 0 or 'Running' not in _tailscale_verify.stdout
 
 - name: Write configuration hash to state file
   ansible.builtin.copy:
