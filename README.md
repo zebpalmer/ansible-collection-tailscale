@@ -25,7 +25,7 @@ Run this role **last** in your playbook to avoid losing SSH connectivity to a ho
 # requirements.yml
 collections:
   - name: zebpalmer.tailscale
-    version: "0.3.0"
+    version: "0.3.1"
 ```
 
 ### From GitHub (pin to a tag)
@@ -36,7 +36,7 @@ collections:
   - name: zebpalmer.tailscale
     source: https://github.com/zebpalmer/ansible-collection-tailscale
     type: git
-    version: "0.3.0"
+    version: "0.3.1"
 ```
 
 ---
