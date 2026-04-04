@@ -44,6 +44,22 @@
     - _tailscale_gpg_download.changed or not _tailscale_keyring_stat.stat.exists
   changed_when: true
 
+- name: Remove legacy Tailscale GPG keyring from /usr/share/keyrings
+  ansible.builtin.file:
+    path: /usr/share/keyrings/tailscale-archive-keyring.gpg
+    state: absent
+  when: tailscale_package_state != 'absent'
+
+- name: Remove legacy Tailscale apt source files referencing /usr/share/keyrings
+  ansible.builtin.shell:
+    cmd: |
+      grep -rl 'tailscale' /etc/apt/sources.list.d/ 2>/dev/null \
+        | xargs grep -l '/usr/share/keyrings/tailscale' 2>/dev/null \
+        | xargs rm -f
+  changed_when: false
+  failed_when: false
+  when: tailscale_package_state != 'absent'
+
 - name: Add Tailscale apt repository
   ansible.builtin.apt_repository:
     repo: >-
