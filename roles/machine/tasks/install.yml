@@ -38,7 +38,7 @@
 - name: Dearmor Tailscale GPG key for apt signed-by
   ansible.builtin.command:
     cmd: >-
-      gpg --dearmor -o /etc/apt/keyrings/tailscale-archive-keyring.gpg
+      gpg --batch --no-tty --yes --dearmor -o /etc/apt/keyrings/tailscale-archive-keyring.gpg
       /tmp/tailscale-keyring.gpg.asc
   when:
     - tailscale_package_state != 'absent'
