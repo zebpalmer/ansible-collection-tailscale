@@ -88,7 +88,8 @@ tailscale_stateful_filtering: false
 
 # Set to a comma-separated CIDR string to advertise subnet routes, e.g.:
 #   tailscale_advertise_routes: "10.0.1.0/24,10.0.2.0/24"
-# false or empty = flag omitted entirely (passing "" causes tailscale up to error)
+# false or empty = passes --advertise-routes= (empty) to explicitly clear any
+# previously advertised routes on the node.
 tailscale_advertise_routes: false
 
 # Port for a self-hosted DERP relay server running on this node.

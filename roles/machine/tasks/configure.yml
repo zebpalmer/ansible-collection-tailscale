@@ -43,7 +43,8 @@
 
 # Construct tailscale_args from composable feature vars.
 # Notes:
-#   - --advertise-routes is OMITTED when not set (empty string causes an error)
+#   - --advertise-routes= (empty) is passed when not set to explicitly clear any
+#     previously advertised routes; omitting the flag leaves existing routes unchanged
 #   - --advertise-connector is only included when connector mode is enabled
 #   - --advertise-tags is NOT set here; initial up uses only tailscale_oauth_tag,
 #     full tag reconciliation happens in post.yml via `tailscale set`
@@ -58,6 +59,8 @@
       --stateful-filtering={{ tailscale_stateful_filtering | string | lower }}
       {% if tailscale_advertise_routes and tailscale_advertise_routes != false %}
       --advertise-routes={{ tailscale_advertise_routes }}
+      {% else %}
+      --advertise-routes=
       {% endif %}
       {% if tailscale_connector %}
       --advertise-connector=true
