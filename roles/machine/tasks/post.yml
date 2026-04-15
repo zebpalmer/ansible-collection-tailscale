@@ -38,7 +38,9 @@
   become: false
   no_log: "{{ not tailscale_insecurely_log_authkey }}"
   changed_when: false
+  when: not ansible_check_mode
 
 - name: Configure Tailscale auto-update
   ansible.builtin.command: tailscale set --auto-update={{ tailscale_auto_update | string | lower }}
   changed_when: false
+  when: not ansible_check_mode
