@@ -57,7 +57,7 @@
       --accept-routes={{ tailscale_accept_routes | string | lower }}
       --snat-subnet-routes={{ tailscale_snat_subnet_routes | string | lower }}
       --stateful-filtering={{ tailscale_stateful_filtering | string | lower }}
-      {% if tailscale_advertise_routes and tailscale_advertise_routes != false %}
+      {% if tailscale_advertise_routes %}
       --advertise-routes={{ tailscale_advertise_routes }}
       {% else %}
       --advertise-routes=
@@ -65,14 +65,14 @@
       {% if tailscale_connector %}
       --advertise-connector=true
       {% endif %}
-      {% if tailscale_relay_server_port and tailscale_relay_server_port != false %}
+      {% if tailscale_relay_server_port %}
       --relay-server-port={{ tailscale_relay_server_port }}
       {% endif %}
 
 - name: Store tailscale_args for debugging
   ansible.builtin.copy:
     content: "{{ tailscale_args }}"
-    dest: /opt/ansible_tailscale_args.txt
+    dest: "{{ tailscale_args_file }}"
     owner: root
     group: root
     mode: "0600"

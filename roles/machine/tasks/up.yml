@@ -43,21 +43,24 @@
          (_tailscale_state.content | default('') | b64decode | trim) != _tailscale_config_hash or
          _tailscale_status.rc != 0 }}
 
-- name: Ensure tailscale_oauth_client_id is set
-  ansible.builtin.fail:
-    msg: "tailscale_oauth_client_id is not set. Add the OAuth client ID to your group_vars."
-  when: tailscale_oauth_client_id | length == 0
-
-- name: Ensure tailscale_authkey is set
-  ansible.builtin.fail:
-    msg: "tailscale_authkey is not set. Vault-encrypt the OAuth client secret and assign it to tailscale_authkey."
-  when: tailscale_authkey | length == 0
+- name: Ensure OAuth credentials are set
+  ansible.builtin.assert:
+    that:
+      - tailscale_oauth_client_id | length > 0
+      - tailscale_authkey | length > 0
+    fail_msg: >-
+      tailscale_oauth_client_id and/or tailscale_authkey are not set.
+      Add the OAuth client ID to your group_vars and vault-encrypt the
+      OAuth client secret as tailscale_authkey.
 
 # --- Path A: node is not connected — full OAuth auth flow ---
 
 - name: Authenticate and bring up Tailscale (not connected)
   when: _tailscale_needs_up | bool and _tailscale_status.rc != 0
   block:
+    # Delegated to localhost so the long-lived OAuth client secret never
+    # leaves the controller. Only the short-lived single-use authkey created
+    # below ships to the target.
     - name: Exchange OAuth credentials for access token
       ansible.builtin.uri:
         url: "https://api.tailscale.com/api/v2/oauth/token"
@@ -68,6 +71,8 @@
           client_secret: "{{ tailscale_authkey }}"
         status_code: 200
       register: _tailscale_token_response
+      delegate_to: localhost
+      become: false
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
     - name: Create one-time auth key via Tailscale API
@@ -89,6 +94,8 @@
           expirySeconds: 300
         status_code: 200
       register: _tailscale_auth_response
+      delegate_to: localhost
+      become: false
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
     - name: Bring up Tailscale with auth key

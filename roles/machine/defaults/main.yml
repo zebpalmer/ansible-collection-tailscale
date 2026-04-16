@@ -35,7 +35,11 @@ tailscale_oauth_ephemeral: false
 tailscale_oauth_preauthorized: true
 
 # Seconds to wait for `tailscale up` to complete.
-tailscale_up_timeout: "120"
+tailscale_up_timeout: 120
+
+# Where the role writes the constructed `tailscale up` arg string for debugging.
+# Root-readable only (0600). Override if /opt is not appropriate for your env.
+tailscale_args_file: /opt/ansible_tailscale_args.txt
 
 # Set true to log the auth key in plain text (useful for debugging auth failures).
 # Keep false in production.

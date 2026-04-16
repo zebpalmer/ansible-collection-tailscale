@@ -1,0 +1,9 @@
+---
+profile: production
+
+exclude_paths:
+  - .github/
+  - .git/
+  - dist/
+
+skip_list: []
