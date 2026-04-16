@@ -1,17 +1,41 @@
 SHELL := /bin/bash
 
-.PHONY: help lint check release patch minor major push \
+.PHONY: help all setup sync lint syntax-check check release patch minor major push \
         check-branch check-dirty check-clean pre-release post-release \
         prompt-type do-release cleanup-tmp
+
+# Default target: run help
+.DEFAULT_GOAL := help
 
 help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-## Linting
-lint: ## Run ansible-lint
-	ansible-lint
+## Environment
+# Sentinel that tracks when the uv-managed env was last synced against pyproject.toml.
+# `lint`, `syntax-check`, etc. depend on this sentinel and rebuild only if
+# pyproject.toml changed — so auto-sync is a one-time cost per dep update.
+.venv/.sync-stamp: pyproject.toml
+	uv sync
+	@mkdir -p .venv && touch $@
 
-check: lint ## Run all pre-push checks (lint). Run this before pushing.
+setup: ## Sync uv-managed env (always runs; forces re-sync)
+	uv sync
+	@mkdir -p .venv && touch .venv/.sync-stamp
+
+sync: setup ## Alias for setup
+
+## Linting
+lint: .venv/.sync-stamp ## Run ansible-lint (auto-syncs env if pyproject.toml changed)
+	uv run ansible-lint
+
+syntax-check: .venv/.sync-stamp ## Ansible playbook syntax check against the collection
+	@mkdir -p .tmp
+	@printf -- '---\n- hosts: localhost\n  gather_facts: false\n  roles:\n    - role: zebpalmer.tailscale.machine\n' > .tmp/smoke.yml
+	uv run ansible-playbook --syntax-check .tmp/smoke.yml
+
+all: lint syntax-check ## Run every pre-push/pre-release check
+
+check: all ## Alias for `all`
 
 ## Release Management
 release: cleanup-tmp check-branch check-dirty prompt-type pre-release do-release post-release cleanup-tmp ## Create a release (interactive or: make release TYPE=patch|minor|major)
@@ -31,7 +55,7 @@ major: ## Bump major version (X.0.0)
 
 ######### Internal Helpers (not shown in help) #########
 
-pre-release: check-branch check-clean lint
+pre-release: check-branch check-clean all
 
 post-release: push
 

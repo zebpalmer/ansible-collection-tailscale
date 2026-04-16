@@ -1,0 +1,9 @@
+[project]
+name = "ansible-role-tailscale-dev"
+version = "0.0.0"
+description = "Dev tooling for the zebpalmer.tailscale Ansible collection"
+requires-python = ">=3.12"
+dependencies = [
+    "ansible-core>=2.20",
+    "ansible-lint>=25.0",
+]

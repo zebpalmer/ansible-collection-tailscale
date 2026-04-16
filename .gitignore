@@ -1,3 +1,9 @@
+# ansible-lint local cache (created when running ansible-lint in this repo)
+.ansible/
+
+# Make-generated scratch dir (e.g. smoke-test playbooks for `make syntax-check`)
+.tmp/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
