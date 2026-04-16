@@ -10,6 +10,7 @@
       - gnupg
     state: present
     update_cache: true
+    cache_valid_time: 3600
   when: tailscale_package_state != 'absent'
 
 - name: Ensure /etc/apt/keyrings directory exists
@@ -76,6 +77,7 @@
     name: tailscale
     state: "{{ tailscale_package_state }}"
     update_cache: true
+    cache_valid_time: 3600
 
 - name: Stop and disable Tailscale service on uninstall
   ansible.builtin.systemd:
