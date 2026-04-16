@@ -1,9 +1,18 @@
 galaxy_info:
+  author: Zeb Palmer
+  description: Install and configure Tailscale on Ubuntu with OAuth-based enrollment.
+  license: MIT
   min_ansible_version: "2.18"
   platforms:
     - name: Ubuntu
       versions:
         - jammy
         - noble
+  galaxy_tags:
+    - tailscale
+    - networking
+    - vpn
+    - ubuntu
+    - security
 
 dependencies: []

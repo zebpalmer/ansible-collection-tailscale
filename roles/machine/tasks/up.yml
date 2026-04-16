@@ -99,7 +99,7 @@
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
     - name: Bring up Tailscale with auth key
-      ansible.builtin.shell: >-
+      ansible.builtin.command: >-
         systemd-run --no-block --
         tailscale up
         --authkey={{ _tailscale_auth_response.json.key }}
@@ -126,7 +126,7 @@
   when: _tailscale_needs_up | bool and _tailscale_status.rc == 0
   block:
     - name: Apply updated Tailscale configuration
-      ansible.builtin.shell: >-
+      ansible.builtin.command: >-
         systemd-run --no-block --
         tailscale up
         --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}

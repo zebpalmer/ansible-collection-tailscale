@@ -1,9 +1,17 @@
 ---
-profile: production
+profile: moderate
 
 exclude_paths:
   - .github/
   - .git/
   - dist/
 
-skip_list: []
+skip_list:
+  # Renaming tailscale_* vars to machine_* would be a breaking change to the
+  # public variable API of this collection. The tailscale_ prefix is clearer
+  # for inventory-level use than a role-name prefix.
+  - var-naming[no-role-prefix]
+
+  # No separate CHANGELOG maintained; releases are tracked via git tags and
+  # GitHub Releases (see galaxy.yml version + `make release`).
+  - galaxy[no-changelog]

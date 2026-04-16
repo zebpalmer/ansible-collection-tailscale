@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: help lint release patch minor major push \
+.PHONY: help lint check release patch minor major push \
         check-branch check-dirty check-clean pre-release post-release \
         prompt-type do-release cleanup-tmp
 
@@ -10,6 +10,8 @@ help: ## Show this help message
 ## Linting
 lint: ## Run ansible-lint
 	ansible-lint
+
+check: lint ## Run all pre-push checks (lint). Run this before pushing.
 
 ## Release Management
 release: cleanup-tmp check-branch check-dirty prompt-type pre-release do-release post-release cleanup-tmp ## Create a release (interactive or: make release TYPE=patch|minor|major)
@@ -29,7 +31,7 @@ major: ## Bump major version (X.0.0)
 
 ######### Internal Helpers (not shown in help) #########
 
-pre-release: check-branch check-clean
+pre-release: check-branch check-clean lint
 
 post-release: push
 

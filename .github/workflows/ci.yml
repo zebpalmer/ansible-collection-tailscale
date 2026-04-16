@@ -54,8 +54,8 @@ jobs:
           python -m pip install --upgrade pip
           pip install "ansible-core>=2.18"
 
-      - name: Install collection dependencies
-        run: ansible-galaxy collection install ansible.posix
+      - name: Install collection dependencies into workspace path
+        run: ansible-galaxy collection install ansible.posix -p ${{ github.workspace }}
 
       - name: Write smoke-test playbook
         run: |
@@ -68,7 +68,8 @@ jobs:
           EOF
 
       - name: Syntax check
-        working-directory: ansible_collections/zebpalmer/tailscale
+        env:
+          ANSIBLE_COLLECTIONS_PATH: ${{ github.workspace }}
         run: ansible-playbook --syntax-check /tmp/smoke.yml
 
   build:
