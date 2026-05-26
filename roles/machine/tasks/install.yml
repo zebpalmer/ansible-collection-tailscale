@@ -74,7 +74,15 @@
       {{ ansible_facts['distribution_release'] }} main
     state: present
     filename: tailscale
+  register: _tailscale_repo
   when: tailscale_package_state != 'absent'
+
+- name: Update apt cache after repo change
+  ansible.builtin.apt:
+    update_cache: true
+  when:
+    - tailscale_package_state != 'absent'
+    - _tailscale_repo.changed | default(false)
 
 - name: Install Tailscale package
   ansible.builtin.apt:
