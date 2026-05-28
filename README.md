@@ -165,6 +165,18 @@ All variables have defaults in `roles/machine/defaults/main.yml`. Override at th
 | `tailscale_connector_tag` | `"connector"` | Tag appended when `tailscale_connector: true` |
 | `tailscale_auto_update` | `false` | Tailscale daemon auto-update. Disabled by default — a restart in prod causes brief connectivity loss. Use a dedicated update playbook instead |
 
+### Peer relay
+
+| Variable | Default | Description |
+|---|---|---|
+| `tailscale_peer_relay` | `false` | Advertise this node as a [peer relay](https://tailscale.com/docs/features/peer-relay). Appends `tailscale_peer_relay_tag` automatically |
+| `tailscale_peer_relay_port` | `42001` | UDP port the peer relay listens on. Must differ from tailscaled's own WireGuard port (41641) |
+| `tailscale_peer_relay_tag` | `"relay"` | Tag appended when `tailscale_peer_relay: true` |
+| `tailscale_peer_relay_static_endpoints` | `[]` | List of `ip:port` strings advertised as static endpoints. Tailscale only accepts IP literals — FQDNs are not supported |
+| `tailscale_peer_relay_watcher` | `false` | Install a systemd timer that auto-updates the static endpoint from this host's public IP (see below) |
+| `tailscale_peer_relay_watcher_url` | `"https://icanhazip.com"` | Public-IP service the watcher curls |
+| `tailscale_peer_relay_watcher_interval` | `"37min"` | `OnUnitActiveSec` for the watcher timer |
+
 ---
 
 ## Usage
@@ -241,6 +253,41 @@ tailscale_tags:
   - "servers"
   - "prod"
 ```
+
+---
+
+### Peer relay behind NAT
+
+A [peer relay](https://tailscale.com/docs/features/peer-relay) is a node on the tailnet that other devices can use to relay traffic when direct (or DERP) paths are not viable. Common deployment: a host on a home or office LAN, reachable from the internet via a port-forward on the upstream router.
+
+```yaml
+# host_vars/banshee.example.com.yml
+tailscale_peer_relay: true
+tailscale_peer_relay_watcher: true   # auto-track router public IP changes
+```
+
+Equivalent ACL fragment (the `relay` nodeAttr is required by Tailscale):
+
+```json
+"tagOwners": {
+  "tag:relay": ["autogroup:admin"]
+},
+"nodeAttrs": [
+  { "target": ["tag:relay"], "attr": ["relay"] }
+]
+```
+
+Configure your router to forward UDP `tailscale_peer_relay_port` (default `42001`) to this host. The watcher curls `https://icanhazip.com` every `tailscale_peer_relay_watcher_interval`, formats `<public-ip>:<port>`, and calls `tailscale set --relay-server-static-endpoints=...` only when the value changes. State is kept in `/var/lib/tailscale-relay-endpoint.state`.
+
+If your public IP is stable, skip the watcher and set the endpoint explicitly:
+
+```yaml
+tailscale_peer_relay: true
+tailscale_peer_relay_static_endpoints:
+  - "203.0.113.10:42001"
+```
+
+> Tailscale's `--relay-server-static-endpoints` flag only accepts IP literals — FQDNs are not supported. The watcher exists because of this.
 
 ---
 

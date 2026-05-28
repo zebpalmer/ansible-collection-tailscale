@@ -1,0 +1,22 @@
+# Requires stratt 0.7.0+ for galaxy.yml-aware release flow and
+# per-file `replace_all`.  Older binaries fail loudly with a version
+# error instead of a confusing strict-mode parse error.
+required_stratt = ">=0.7.0"
+
+[bump]
+current_version = "0.7.2"
+commit = true
+tag = true
+message = "Release {new_version}"
+tag_name = "{new_version}"
+
+[[bump.files]]
+filename = "galaxy.yml"
+search = "version: {current_version}"
+replace = "version: {new_version}"
+
+[[bump.files]]
+filename = "README.md"
+search = 'version: "{current_version}"'
+replace = 'version: "{new_version}"'
+replace_all = true

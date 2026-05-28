@@ -121,5 +121,9 @@
     state: absent
   loop:
     - /var/lib/tailscale-ansible.state
+    - /var/lib/tailscale-relay-endpoint.state
+    - /usr/local/sbin/tailscale-relay-endpoint-update
+    - /etc/systemd/system/tailscale-relay-endpoint.service
+    - /etc/systemd/system/tailscale-relay-endpoint.timer
     - "{{ tailscale_args_file }}"
   when: tailscale_package_state == 'absent'

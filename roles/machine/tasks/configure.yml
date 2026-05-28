@@ -38,7 +38,8 @@
     _tailscale_effective_tags: >-
       {{ ([tailscale_oauth_tag]
          + (tailscale_tags if tailscale_tags | length > 0 else ['servers'])
-         + ([tailscale_connector_tag] if tailscale_connector else []))
+         + ([tailscale_connector_tag] if tailscale_connector else [])
+         + ([tailscale_peer_relay_tag] if tailscale_peer_relay else []))
          | unique }}
 
 # Construct tailscale_args from composable feature vars.
@@ -65,8 +66,11 @@
       {% if tailscale_connector %}
       --advertise-connector=true
       {% endif %}
-      {% if tailscale_relay_server_port %}
-      --relay-server-port={{ tailscale_relay_server_port }}
+      {% if tailscale_peer_relay %}
+      --relay-server-port={{ tailscale_peer_relay_port }}
+      {% if tailscale_peer_relay_static_endpoints | length > 0 %}
+      --relay-server-static-endpoints={{ tailscale_peer_relay_static_endpoints | join(',') }}
+      {% endif %}
       {% endif %}
 
 - name: Store tailscale_args for debugging

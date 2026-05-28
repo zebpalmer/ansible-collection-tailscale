@@ -12,3 +12,7 @@
 - name: Post-configuration
   ansible.builtin.import_tasks: post.yml
   when: tailscale_package_state != 'absent'
+
+- name: Configure peer relay endpoint watcher
+  ansible.builtin.import_tasks: peer_relay.yml
+  when: tailscale_package_state != 'absent'

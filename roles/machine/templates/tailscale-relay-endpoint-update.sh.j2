@@ -1,0 +1,30 @@
+#!/bin/bash
+# Managed by zebpalmer.tailscale.machine — do not edit by hand.
+#
+# Fetches this host's public IPv4 from a remote service, formats it as
+# <ip>:<peer-relay-port>, and calls `tailscale set` when the value changes
+# from the last applied state. Intended to be driven by a systemd timer on
+# nodes that are peer relays behind a NAT with a port-forward.
+
+set -euo pipefail
+
+PORT="{{ tailscale_peer_relay_port }}"
+URL="{{ tailscale_peer_relay_watcher_url }}"
+STATE_FILE=/var/lib/tailscale-relay-endpoint.state
+
+IP=$(curl --silent --show-error --fail --max-time 10 "$URL" | tr -d '[:space:]')
+
+if ! [[ "$IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  echo "tailscale-relay-endpoint: unexpected response from $URL: '$IP'" >&2
+  exit 1
+fi
+
+ENDPOINT="${IP}:${PORT}"
+
+if [[ -f "$STATE_FILE" ]] && [[ "$(cat "$STATE_FILE")" == "$ENDPOINT" ]]; then
+  exit 0
+fi
+
+tailscale set --relay-server-static-endpoints="$ENDPOINT"
+printf '%s\n' "$ENDPOINT" > "$STATE_FILE"
+logger -t tailscale-relay-endpoint "set static endpoint to $ENDPOINT"

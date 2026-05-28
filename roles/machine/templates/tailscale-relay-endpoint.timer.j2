@@ -1,0 +1,10 @@
+[Unit]
+Description=Periodic refresh of Tailscale peer-relay static endpoint
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec={{ tailscale_peer_relay_watcher_interval }}
+Unit=tailscale-relay-endpoint.service
+
+[Install]
+WantedBy=timers.target

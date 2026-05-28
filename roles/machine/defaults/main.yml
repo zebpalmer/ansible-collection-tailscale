@@ -96,10 +96,46 @@ tailscale_stateful_filtering: false
 # previously advertised routes on the node.
 tailscale_advertise_routes: false
 
-# Port for a self-hosted DERP relay server running on this node.
-# false or empty = flag omitted (most nodes). Set to an integer port number
-# only on dedicated relay hosts (e.g. tailscale_relay_server_port: 42001).
-tailscale_relay_server_port: false
+# ---------------------------------------------------------------------------
+# Peer relay
+# ---------------------------------------------------------------------------
+# Advertises this node as a Tailscale peer relay — a WireGuard-based relay
+# that other tailnet nodes can use when direct connections fail. This is NOT
+# a DERP relay (those run a separate `derper` binary and are out of scope
+# for this role).
+#
+# When enabled, tailscale_peer_relay_tag is appended to the node's tags. The
+# tag must exist in ACL tagOwners, and you must grant the "relay" nodeAttr
+# to that tag in your tailnet policy:
+#
+#   "nodeAttrs": [
+#     { "target": ["tag:relay"], "attr": ["relay"] }
+#   ]
+tailscale_peer_relay: false
+
+# UDP port the peer relay listens on. Must differ from the regular tailscaled
+# WireGuard port (41641 by default). Only used when tailscale_peer_relay: true.
+tailscale_peer_relay_port: 42001
+
+# Tag appended to tailscale_tags when peer relay is enabled.
+tailscale_peer_relay_tag: "relay"
+
+# Static endpoints advertised to peers — IP:port pairs (FQDNs are NOT supported
+# by Tailscale). Useful when this host sits behind NAT and is reachable via a
+# port-forward on a router's public IP. Examples:
+#   tailscale_peer_relay_static_endpoints:
+#     - "203.0.113.10:42001"
+#     - "[2001:db8::1]:42001"
+# When the watcher (below) is enabled, it overrides this value at runtime.
+tailscale_peer_relay_static_endpoints: []
+
+# Public-IP watcher: a systemd timer that periodically curls a public-IP
+# service, formats the result as <ip>:<peer_relay_port>, and calls
+# `tailscale set --relay-server-static-endpoints=...` when the value changes.
+# Use this when the upstream router's public IP is dynamic.
+tailscale_peer_relay_watcher: false
+tailscale_peer_relay_watcher_url: "https://icanhazip.com"
+tailscale_peer_relay_watcher_interval: "37min"
 
 # ---------------------------------------------------------------------------
 # Connector / subnet connector

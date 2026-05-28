@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh Tailscale peer-relay static endpoint from public IP
+After=tailscaled.service network-online.target
+Wants=network-online.target
+Requires=tailscaled.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/tailscale-relay-endpoint-update

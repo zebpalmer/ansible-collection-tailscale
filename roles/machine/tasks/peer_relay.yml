@@ -1,0 +1,76 @@
+---
+# Manages the public-IP watcher that keeps the peer relay's static endpoint
+# in sync with a NAT/port-forward setup. Imported from main.yml; gated on
+# tailscale_peer_relay at the import site so this file always runs in a
+# peer-relay context. The watcher itself is opt-in via
+# tailscale_peer_relay_watcher.
+
+- name: Install peer-relay endpoint update script
+  ansible.builtin.template:
+    src: tailscale-relay-endpoint-update.sh.j2
+    dest: /usr/local/sbin/tailscale-relay-endpoint-update
+    owner: root
+    group: root
+    mode: "0755"
+  when: tailscale_peer_relay_watcher | bool
+
+- name: Install peer-relay endpoint systemd service
+  ansible.builtin.template:
+    src: tailscale-relay-endpoint.service.j2
+    dest: /etc/systemd/system/tailscale-relay-endpoint.service
+    owner: root
+    group: root
+    mode: "0644"
+  when: tailscale_peer_relay_watcher | bool
+  register: _tailscale_relay_service
+
+- name: Install peer-relay endpoint systemd timer
+  ansible.builtin.template:
+    src: tailscale-relay-endpoint.timer.j2
+    dest: /etc/systemd/system/tailscale-relay-endpoint.timer
+    owner: root
+    group: root
+    mode: "0644"
+  when: tailscale_peer_relay_watcher | bool
+  register: _tailscale_relay_timer
+
+- name: Reload systemd after unit changes
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - tailscale_peer_relay_watcher | bool
+    - _tailscale_relay_service.changed or _tailscale_relay_timer.changed
+
+- name: Enable and start peer-relay endpoint timer
+  ansible.builtin.systemd:
+    name: tailscale-relay-endpoint.timer
+    state: started
+    enabled: true
+  when: tailscale_peer_relay_watcher | bool
+
+- name: Stop and disable peer-relay endpoint timer when watcher disabled
+  ansible.builtin.systemd:
+    name: tailscale-relay-endpoint.timer
+    state: stopped
+    enabled: false
+  when: not (tailscale_peer_relay_watcher | bool)
+  failed_when: false
+
+- name: Remove peer-relay endpoint files when watcher disabled
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /usr/local/sbin/tailscale-relay-endpoint-update
+    - /etc/systemd/system/tailscale-relay-endpoint.service
+    - /etc/systemd/system/tailscale-relay-endpoint.timer
+    - /var/lib/tailscale-relay-endpoint.state
+  when: not (tailscale_peer_relay_watcher | bool)
+  register: _tailscale_relay_removed
+
+- name: Reload systemd after removing units
+  ansible.builtin.systemd:
+    daemon_reload: true
+  when:
+    - not (tailscale_peer_relay_watcher | bool)
+    - _tailscale_relay_removed.changed
