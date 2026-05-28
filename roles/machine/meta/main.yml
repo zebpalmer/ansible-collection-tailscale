@@ -1,3 +1,4 @@
+---
 galaxy_info:
   author: Zeb Palmer
   description: Install and configure Tailscale on Ubuntu with OAuth-based enrollment.

@@ -128,7 +128,6 @@ tailscale_peer_relay_tag: "relay"
 #     - "[2001:db8::1]:42001"
 # When the watcher (below) is enabled, it overrides this value at runtime.
 tailscale_peer_relay_static_endpoints: []
-
 # Public-IP watcher: a systemd timer that periodically curls a public-IP
 # service, formats the result as <ip>:<peer_relay_port>, and calls
 # `tailscale set --relay-server-static-endpoints=...` when the value changes.
