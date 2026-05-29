@@ -259,7 +259,7 @@ tailscale_tags:
 
 ### Peer relay behind NAT
 
-A [peer relay](https://tailscale.com/docs/features/peer-relay) is a node on the tailnet that other devices can use to relay traffic when direct (or DERP) paths are not viable. Common deployment: a host on a home or office LAN, reachable from the internet via a port-forward on the upstream router.
+A [peer relay](https://tailscale.com/docs/features/peer-relay) is a node other devices fall back to when a direct connection isn't possible — preferred over Tailscale's DERP relays because it is usually lower-latency. Common deployment: a host on a home or office LAN, reachable from the internet via a port-forward on the upstream router.
 
 ```yaml
 # host_vars/banshee.example.com.yml
@@ -267,18 +267,28 @@ tailscale_peer_relay: true
 tailscale_peer_relay_watcher: true   # auto-track router public IP changes
 ```
 
-Equivalent ACL fragment (the `relay` nodeAttr is required by Tailscale):
+Authorize it in your tailnet policy. `tag:relay` must exist in `tagOwners`. Per Tailscale, the relay node itself needs no policy entry beyond `tailscale set --relay-server-port` (which this role runs) — but **client devices must be granted the `tailscale.com/cap/relay` capability toward the relay**. Without this grant the control plane never advertises the relay to clients and it is silently unused (no error, just zero relay traffic):
 
 ```json
 "tagOwners": {
   "tag:relay": ["autogroup:admin"]
 },
-"nodeAttrs": [
-  { "target": ["tag:relay"], "attr": ["relay"] }
+"grants": [
+  {
+    // Devices allowed to USE the relay (typically those behind restrictive NAT).
+    // Avoid "*": it makes every device attempt relay discovery/use.
+    "src": ["tag:remote-site", "autogroup:member"],
+    "dst": ["tag:relay"],
+    "app": { "tailscale.com/cap/relay": [] }
+  }
 ]
 ```
 
-The relay server port is applied with `tailscale set --relay-server-port=...` (it is a `tailscale set` flag, not a `tailscale up` flag), and `tag:relay` is added to the node's advertised tags so the `relay` nodeAttr applies.
+> **Opt-in and fallback-only — it authorizes, it does not force.** Tailscale prefers direct → peer relay → DERP in that order, so granted peers use the relay only when a direct connection fails, and fall back to DERP if the relay is unreachable. The `src` list scopes who *may* use it, never who *must*.
+
+> **Earlier releases of this README documented a `relay` nodeAttr here. That is not how GA peer relays are authorized** — use the `tailscale.com/cap/relay` grant above.
+
+The relay server port is applied with `tailscale set --relay-server-port=...` (a `tailscale set` flag, not a `tailscale up` flag), and `tag:relay` is added to the node's advertised tags so it can be the `dst` of the grant above.
 
 Configure your router to forward UDP `tailscale_peer_relay_port` (default `42001`) to this host. The watcher curls `https://icanhazip.com` every `tailscale_peer_relay_watcher_interval`, formats `<public-ip>:<port>`, and calls `tailscale set --relay-server-static-endpoints=...` only when it differs from the endpoint tailscaled is currently advertising. Comparing against the live daemon pref (rather than a cached file) means the endpoint self-heals if a `tailscale up` resets it.
 

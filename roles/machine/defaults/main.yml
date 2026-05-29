@@ -105,12 +105,22 @@ tailscale_advertise_routes: false
 # for this role).
 #
 # When enabled, tailscale_peer_relay_tag is appended to the node's tags. The
-# tag must exist in ACL tagOwners, and you must grant the "relay" nodeAttr
-# to that tag in your tailnet policy:
+# tag must exist in ACL tagOwners. Setting the relay-server port is all the
+# relay NODE needs — but client devices must be granted the
+# tailscale.com/cap/relay capability toward the relay, or the control plane
+# never advertises it to them and it sits unused (no error, zero relay traffic):
 #
-#   "nodeAttrs": [
-#     { "target": ["tag:relay"], "attr": ["relay"] }
+#   "grants": [
+#     {
+#       "src": ["tag:remote-site"],   # devices allowed to use the relay; avoid "*"
+#       "dst": ["tag:relay"],
+#       "app": {"tailscale.com/cap/relay": []}
+#     }
 #   ]
+#
+# NOTE: a "relay" nodeAttr is NOT how GA peer relays are authorized — use the
+# grant above. Peer relay is fallback-only (direct > peer relay > DERP); the
+# grant authorizes use, it does not force traffic through the relay.
 tailscale_peer_relay: false
 
 # UDP port the peer relay listens on. Must differ from the regular tailscaled
