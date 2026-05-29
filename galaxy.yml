@@ -1,7 +1,7 @@
 ---
 namespace: zebpalmer
 name: tailscale
-version: 0.9.0
+version: 0.9.1
 readme: README.md
 description: >
   Ansible collection for Tailscale on Ubuntu. Composable per-host/per-group
