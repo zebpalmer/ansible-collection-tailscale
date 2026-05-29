@@ -35,8 +35,7 @@
     - not (tailscale_peer_relay_watcher | bool)
     - tailscale_peer_relay_static_endpoints | length > 0
     - not ansible_check_mode
-    - ((_tailscale_relay_prefs.stdout | from_json).RelayServerStaticEndpoints | default([]) | sort)
-      != (tailscale_peer_relay_static_endpoints | sort)
+    - ((_tailscale_relay_prefs.stdout | from_json).RelayServerStaticEndpoints | default([]) | sort) != (tailscale_peer_relay_static_endpoints | sort)
 
 - name: Disable peer-relay server port when peer relay is turned off
   ansible.builtin.command: tailscale set --relay-server-port=
@@ -119,7 +118,7 @@
     - /usr/local/sbin/tailscale-relay-endpoint-update
     - /etc/systemd/system/tailscale-relay-endpoint.service
     - /etc/systemd/system/tailscale-relay-endpoint.timer
-    - /var/lib/tailscale-relay-endpoint.state  # legacy: pre-self-healing watcher state
+    - /var/lib/tailscale-relay-endpoint.state # legacy: pre-self-healing watcher state
   when: not (tailscale_peer_relay_watcher | bool)
   register: _tailscale_relay_removed
 
