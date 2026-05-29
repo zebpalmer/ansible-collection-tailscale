@@ -11,7 +11,8 @@ Ansible collection for installing and configuring Tailscale on Ubuntu. Provides 
 1. **install** — adds the official Tailscale apt repo + GPG key, installs the package
 2. **configure** — enables IPv4/IPv6 forwarding, merges tags, constructs `tailscale_args` from composable vars
 3. **up** — runs `tailscale up` only when config has changed or the node is disconnected (idempotency via SHA-256 state hash)
-4. **post** — applies `tailscale set` settings (auto-update)
+4. **post** — applies `tailscale set` settings (auto-update), disables key expiry via the API
+5. **peer_relay** — applies peer-relay `tailscale set` settings (relay server port, static endpoints) and manages the optional public-IP watcher
 
 Run this role **last** in your playbook to avoid losing SSH connectivity to a host mid-play.
 
@@ -277,7 +278,9 @@ Equivalent ACL fragment (the `relay` nodeAttr is required by Tailscale):
 ]
 ```
 
-Configure your router to forward UDP `tailscale_peer_relay_port` (default `42001`) to this host. The watcher curls `https://icanhazip.com` every `tailscale_peer_relay_watcher_interval`, formats `<public-ip>:<port>`, and calls `tailscale set --relay-server-static-endpoints=...` only when the value changes. State is kept in `/var/lib/tailscale-relay-endpoint.state`.
+The relay server port is applied with `tailscale set --relay-server-port=...` (it is a `tailscale set` flag, not a `tailscale up` flag), and `tag:relay` is added to the node's advertised tags so the `relay` nodeAttr applies.
+
+Configure your router to forward UDP `tailscale_peer_relay_port` (default `42001`) to this host. The watcher curls `https://icanhazip.com` every `tailscale_peer_relay_watcher_interval`, formats `<public-ip>:<port>`, and calls `tailscale set --relay-server-static-endpoints=...` only when it differs from the endpoint tailscaled is currently advertising. Comparing against the live daemon pref (rather than a cached file) means the endpoint self-heals if a `tailscale up` resets it.
 
 If your public IP is stable, skip the watcher and set the endpoint explicitly:
 
@@ -342,6 +345,8 @@ tailscale_tags:
 ## Idempotency
 
 The role stores a SHA-256 hash of `tailscale_args` + effective tags in `/var/lib/tailscale-ansible.state`. `tailscale up` is skipped if the hash matches the stored value **and** the node is already connected. The auth key is excluded from the hash intentionally — rotating the OAuth secret does not trigger a re-up.
+
+`tailscale up` runs detached (`systemd-run --no-block`) so a daemon restart can't sever the SSH session it rides over — which also hides its exit code. The detached wrapper records that exit code to `/run/tailscale-ansible-up.rc`; the role reads it after reconnecting and **fails the play on a non-zero result**. The state hash is written only after that check passes, so a failed up (e.g. a rejected flag) is never recorded as converged and the next run retries.
 
 ---
 

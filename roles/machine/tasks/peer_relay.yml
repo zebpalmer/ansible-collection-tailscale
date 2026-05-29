@@ -1,9 +1,52 @@
 ---
-# Manages the public-IP watcher that keeps the peer relay's static endpoint
-# in sync with a NAT/port-forward setup. Imported from main.yml; gated on
-# tailscale_peer_relay at the import site so this file always runs in a
-# peer-relay context. The watcher itself is opt-in via
-# tailscale_peer_relay_watcher.
+# Configures Tailscale peer-relay server settings and (optionally) the
+# public-IP watcher that keeps the relay's static endpoint in sync with a
+# NAT/port-forward setup. Imported from main.yml unconditionally; every task
+# is gated on a peer-relay flag so this is a no-op on non-relay nodes.
+#
+# Relay settings are applied here via `tailscale set` rather than in the
+# `tailscale up` args, because --relay-server-port and
+# --relay-server-static-endpoints are `tailscale set` flags. Passing them to
+# `tailscale up` makes it abort with an unknown-flag error.
+
+# --- Relay server port / static endpoints (tailscale set) ---
+
+- name: Read current Tailscale prefs (peer relay)
+  ansible.builtin.command: tailscale debug prefs
+  register: _tailscale_relay_prefs
+  changed_when: false
+  when: not ansible_check_mode
+
+- name: Set peer-relay server port
+  ansible.builtin.command: tailscale set --relay-server-port={{ tailscale_peer_relay_port }}
+  changed_when: true
+  when:
+    - tailscale_peer_relay | bool
+    - not ansible_check_mode
+    - (_tailscale_relay_prefs.stdout | from_json).RelayServerPort | default(0) | int != tailscale_peer_relay_port | int
+
+- name: Set peer-relay static endpoints (only when watcher is not managing them)
+  ansible.builtin.command: >-
+    tailscale set
+    --relay-server-static-endpoints={{ tailscale_peer_relay_static_endpoints | join(',') }}
+  changed_when: true
+  when:
+    - tailscale_peer_relay | bool
+    - not (tailscale_peer_relay_watcher | bool)
+    - tailscale_peer_relay_static_endpoints | length > 0
+    - not ansible_check_mode
+    - ((_tailscale_relay_prefs.stdout | from_json).RelayServerStaticEndpoints | default([]) | sort)
+      != (tailscale_peer_relay_static_endpoints | sort)
+
+- name: Disable peer-relay server port when peer relay is turned off
+  ansible.builtin.command: tailscale set --relay-server-port=
+  changed_when: true
+  when:
+    - not (tailscale_peer_relay | bool)
+    - not ansible_check_mode
+    - (_tailscale_relay_prefs.stdout | from_json).RelayServerPort | default(0) | int != 0
+
+# --- Public-IP watcher (opt-in via tailscale_peer_relay_watcher) ---
 
 - name: Install peer-relay endpoint update script
   ansible.builtin.template:
@@ -48,6 +91,18 @@
     enabled: true
   when: tailscale_peer_relay_watcher | bool
 
+# A `tailscale up` earlier in the role resets any pref not named in its args,
+# including the relay static endpoint. Run the watcher once now to restore it
+# immediately rather than waiting for the next timer tick. Best-effort: the
+# timer is the authoritative driver and will retry on its own schedule.
+- name: Refresh peer-relay static endpoint now
+  ansible.builtin.command: /usr/local/sbin/tailscale-relay-endpoint-update
+  changed_when: false
+  failed_when: false
+  when:
+    - tailscale_peer_relay_watcher | bool
+    - not ansible_check_mode
+
 - name: Stop and disable peer-relay endpoint timer when watcher disabled
   ansible.builtin.systemd:
     name: tailscale-relay-endpoint.timer
@@ -64,7 +119,7 @@
     - /usr/local/sbin/tailscale-relay-endpoint-update
     - /etc/systemd/system/tailscale-relay-endpoint.service
     - /etc/systemd/system/tailscale-relay-endpoint.timer
-    - /var/lib/tailscale-relay-endpoint.state
+    - /var/lib/tailscale-relay-endpoint.state  # legacy: pre-self-healing watcher state
   when: not (tailscale_peer_relay_watcher | bool)
   register: _tailscale_relay_removed
 

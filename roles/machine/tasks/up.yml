@@ -17,6 +17,16 @@
 #   Already connected, config changed — update in-place without re-auth:
 #     tailscale up (no --authkey) — updates args and tags on the existing
 #     device identity. No new device is created, no duplicate in the admin UI.
+#
+# Because `tailscale up` is detached via `systemd-run --no-block` (so a daemon
+# restart cannot sever the SSH session it rides over), its exit status is not
+# directly visible to Ansible — `tailscale status` returning 0 only proves the
+# node is still connected on its OLD config, not that the new config applied.
+# To avoid masking a failed up (e.g. a rejected flag), the wrapper records
+# `tailscale up`'s real exit code to /run/tailscale-ansible-up.rc. The
+# verification step reads it and fails the play on a non-zero result, and the
+# config-hash state file is written only after that check passes — so a failed
+# up is never recorded as converged and the next run retries.
 
 - name: Compute configuration hash
   ansible.builtin.set_fact:
@@ -52,6 +62,16 @@
       tailscale_oauth_client_id and/or tailscale_authkey are not set.
       Add the OAuth client ID to your group_vars and vault-encrypt the
       OAuth client secret as tailscale_authkey.
+
+# Clear any result file from a previous run so the verification below cannot
+# read a stale exit code.
+- name: Remove stale tailscale up result file
+  ansible.builtin.file:
+    path: /run/tailscale-ansible-up.rc
+    state: absent
+  when:
+    - _tailscale_needs_up | bool
+    - not ansible_check_mode
 
 # --- Path A: node is not connected — full OAuth auth flow ---
 
@@ -98,14 +118,18 @@
       become: false
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
 
+    # The bash wrapper records `tailscale up`'s exit code so the detached run's
+    # success/failure can be verified after the SSH session reconnects.
     - name: Bring up Tailscale with auth key
       ansible.builtin.command: >-
         systemd-run --no-block --
-        tailscale up
+        /bin/bash -c
+        'tailscale up
         --authkey={{ _tailscale_auth_response.json.key }}
         --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
         {{ tailscale_args | trim }}
         --timeout={{ tailscale_up_timeout }}s
+        ; echo $? > /run/tailscale-ansible-up.rc'
       no_log: "{{ not tailscale_insecurely_log_authkey }}"
       changed_when: true
 
@@ -113,12 +137,6 @@
       ansible.builtin.wait_for_connection:
         delay: 5
         timeout: "{{ tailscale_up_timeout | int + 30 }}"
-
-    - name: Verify Tailscale is running
-      ansible.builtin.command: tailscale status --peers=false
-      register: _tailscale_verify
-      changed_when: false
-      failed_when: _tailscale_verify.rc != 0
 
 # --- Path B: already connected, config changed — update in-place ---
 
@@ -128,10 +146,12 @@
     - name: Apply updated Tailscale configuration
       ansible.builtin.command: >-
         systemd-run --no-block --
-        tailscale up
+        /bin/bash -c
+        'tailscale up
         --advertise-tags={{ _tailscale_effective_tags | map('regex_replace', '^', 'tag:') | join(',') }}
         {{ tailscale_args | trim }}
         --timeout={{ tailscale_up_timeout }}s
+        ; echo $? > /run/tailscale-ansible-up.rc'
       changed_when: true
 
     - name: Wait for Tailscale to reconnect
@@ -139,12 +159,42 @@
         delay: 3
         timeout: 60
 
-    - name: Verify Tailscale is running
-      ansible.builtin.command: tailscale status --peers=false
-      register: _tailscale_verify
-      changed_when: false
-      failed_when: _tailscale_verify.rc != 0
+# --- Verify the detached `tailscale up` actually succeeded ---
 
+- name: Wait for the tailscale up result to be recorded
+  ansible.builtin.wait_for:
+    path: /run/tailscale-ansible-up.rc
+    timeout: "{{ tailscale_up_timeout | int + 30 }}"
+  when:
+    - _tailscale_needs_up | bool
+    - not ansible_check_mode
+
+- name: Read tailscale up result
+  ansible.builtin.slurp:
+    src: /run/tailscale-ansible-up.rc
+  register: _tailscale_up_rc
+  when:
+    - _tailscale_needs_up | bool
+    - not ansible_check_mode
+
+- name: Fail if tailscale up did not succeed
+  ansible.builtin.assert:
+    that:
+      - (_tailscale_up_rc.content | b64decode | trim) == "0"
+    fail_msg: >-
+      `tailscale up` exited with status
+      '{{ _tailscale_up_rc.content | b64decode | trim }}' on {{ inventory_hostname }}.
+      The requested configuration was NOT applied — most often a rejected flag
+      or an ACL/tag authorization problem. Inspect the transient unit's output
+      with `journalctl -u "run-*"` (or `journalctl -u tailscaled`) on the host.
+      The config-hash state file is left unwritten, so the next run will retry.
+    success_msg: "tailscale up applied successfully."
+  when:
+    - _tailscale_needs_up | bool
+    - not ansible_check_mode
+
+# Written only after the up is confirmed successful — a failed up halts the play
+# at the assert above, leaving the hash absent so the next run retries.
 - name: Write configuration hash to state file
   ansible.builtin.copy:
     content: "{{ _tailscale_config_hash }}"
@@ -152,4 +202,6 @@
     owner: root
     group: root
     mode: "0600"
-  when: _tailscale_needs_up | bool
+  when:
+    - _tailscale_needs_up | bool
+    - not ansible_check_mode

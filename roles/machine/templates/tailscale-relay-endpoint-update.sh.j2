@@ -2,17 +2,23 @@
 # Managed by zebpalmer.tailscale.machine — do not edit by hand.
 #
 # Fetches this host's public IPv4 from a remote service, formats it as
-# <ip>:<peer-relay-port>, and calls `tailscale set` when the value changes
-# from the last applied state. Intended to be driven by a systemd timer on
-# nodes that are peer relays behind a NAT with a port-forward.
+# <ip>:<peer-relay-port>, and calls `tailscale set` when it differs from the
+# endpoint tailscaled is currently advertising. Intended to be driven by a
+# systemd timer on nodes that are peer relays behind a NAT with a port-forward.
+#
+# The desired value is compared against the LIVE daemon pref (not a cached
+# state file) so the endpoint self-heals if a `tailscale up` — which resets
+# any pref not named in its args — clears it out from under us.
 
 set -euo pipefail
 
 PORT="{{ tailscale_peer_relay_port }}"
 URL="{{ tailscale_peer_relay_watcher_url }}"
-STATE_FILE=/var/lib/tailscale-relay-endpoint.state
 
-IP=$(curl --silent --show-error --fail --max-time 10 "$URL" | tr -d '[:space:]')
+# -4 forces IPv4: the public-IP service echoes whichever family the request
+# arrived on, and on a dual-stack host an IPv6 answer would fail the IPv4 check
+# below — leaving the endpoint silently unset. NAT port-forwards are IPv4.
+IP=$(curl -4 --silent --show-error --fail --max-time 10 "$URL" | tr -d '[:space:]')
 
 if ! [[ "$IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
   echo "tailscale-relay-endpoint: unexpected response from $URL: '$IP'" >&2
@@ -21,10 +27,13 @@ fi
 
 ENDPOINT="${IP}:${PORT}"
 
-if [[ -f "$STATE_FILE" ]] && [[ "$(cat "$STATE_FILE")" == "$ENDPOINT" ]]; then
+# Comma-joined list of endpoints tailscaled is currently advertising.
+CURRENT=$(tailscale debug prefs \
+  | python3 -c 'import sys, json; e = json.load(sys.stdin).get("RelayServerStaticEndpoints") or []; print(",".join(e))')
+
+if [[ "$CURRENT" == "$ENDPOINT" ]]; then
   exit 0
 fi
 
 tailscale set --relay-server-static-endpoints="$ENDPOINT"
-printf '%s\n' "$ENDPOINT" > "$STATE_FILE"
-logger -t tailscale-relay-endpoint "set static endpoint to $ENDPOINT"
+logger -t tailscale-relay-endpoint "set static endpoint to $ENDPOINT (was: ${CURRENT:-none})"

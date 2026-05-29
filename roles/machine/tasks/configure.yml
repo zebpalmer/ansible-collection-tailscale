@@ -47,8 +47,12 @@
 #   - --advertise-routes= (empty) is passed when not set to explicitly clear any
 #     previously advertised routes; omitting the flag leaves existing routes unchanged
 #   - --advertise-connector is only included when connector mode is enabled
-#   - --advertise-tags is NOT set here; initial up uses only tailscale_oauth_tag,
-#     full tag reconciliation happens in post.yml via `tailscale set`
+#   - peer-relay settings (--relay-server-port / --relay-server-static-endpoints)
+#     are intentionally NOT included here. They are `tailscale set` flags, not
+#     `tailscale up` flags — folding them into the up args makes `tailscale up`
+#     abort with an unknown-flag error. They are applied via `tailscale set` in
+#     peer_relay.yml instead. The tag:relay advertisement is still carried by
+#     _tailscale_effective_tags → --advertise-tags, which is correct for `up`.
 - name: Construct tailscale_args
   ansible.builtin.set_fact:
     tailscale_args: >-
@@ -65,12 +69,6 @@
       {% endif %}
       {% if tailscale_connector %}
       --advertise-connector=true
-      {% endif %}
-      {% if tailscale_peer_relay %}
-      --relay-server-port={{ tailscale_peer_relay_port }}
-      {% if tailscale_peer_relay_static_endpoints | length > 0 %}
-      --relay-server-static-endpoints={{ tailscale_peer_relay_static_endpoints | join(',') }}
-      {% endif %}
       {% endif %}
 
 - name: Store tailscale_args for debugging
